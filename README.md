@@ -55,9 +55,10 @@ You can also enable the following flags if your dataset includes:
 11. Switch the toggle to `metadata` and run the full script.
 12. If any schema or template validation errors appear, run the validation 
     checks and resolve them before finalizing.
-13. If you are publishing on IRMA, uncomment lines 29, 33, and 35 as needed. 
-    These lines are typically left commented out to prevent accidental publishing 
-    before the metadata have been approved.
+13. If you are publishing on IRMA, go to `source_code/10_EML_creation.R` and
+    uncomment lines 29, 33, and 35 as needed. These lines are typically left
+    commented out to prevent accidental publishing before the metadata have
+    been approved.
 
 ---
 
