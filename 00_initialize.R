@@ -21,7 +21,7 @@ data_descriptions <- character(length(data_files))
 
 #------------------- Toggle different workflows --------------------------------
 
-task     <- "workbook"   # "workbook" | "fix" | "metadata"
+task     <- "reboot"   # "workbook" | "fix" | "metadata" | "reboot"
 geo_data <- FALSE         # only used when task == "workbook"
 tax_data <- TRUE         # only used when task == "workbook"
 
@@ -32,7 +32,7 @@ run_delete_catvars      <- task == "fix"
 run_catvar_gen          <- task %in% c("workbook", "fix")
 run_geospatial_gen      <- task == "workbook" && geo_data
 run_taxonomy_gen        <- task == "workbook" && tax_data
-run_txt_to_excel        <- task %in% c("workbook", "fix")
+run_txt_to_excel        <- task %in% c("workbook", "fix", "reboot")
 run_excel_to_txt        <- task == "metadata"
 run_eml_creation        <- task == "metadata"
 

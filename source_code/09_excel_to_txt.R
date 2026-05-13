@@ -124,7 +124,7 @@ if (!is.na(abstract_value)) {
 
 #### additional info ####
 
-sheet_name <- "additional info"
+sheet_name <- "additional_info"
 
 # Read B2
 val <- read_excel(

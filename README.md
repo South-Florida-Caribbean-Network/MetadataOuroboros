@@ -23,6 +23,7 @@ Open `00_initialize.R` and set your workflow toggle before running:
 | `workbook` | Initial setup: generates the blank Excel workbook and EMLassemblyline txt files |
 | `fix` | Corrects misclassified categorical variables, updates the attribute table, and regenerates the workbook. Only run this step on newly generated workbooks, before any fields have been filled out! |
 | `metadata` | Reads the filled workbook from `filled_form/` and produces the final XML file |
+| `reboot` | Creates a workbook from filled txt files |
 
 You can also enable the following flags if your dataset includes:
 - `geo_data` — geospatial data
@@ -31,7 +32,7 @@ You can also enable the following flags if your dataset includes:
 ---
 
 ## How to Use
-
+### workbook, fix, and metadata
 1.  Place your CSV files in `working_folder/`.
 2.  Open `00_initialize.R`.
 3.  Set your toggle and any data flags (see Toggles above).
@@ -58,6 +59,14 @@ You can also enable the following flags if your dataset includes:
 13. If you are publishing on IRMA, uncomment lines 29, 33, and 35 as needed. 
     These lines are typically left commented out to prevent accidental publishing 
     before the metadata have been approved.
+    
+### reboot    
+    `reboot` can be used to create an excel workbook out of filled out 
+    .txt files. Simply put the filled txt files in the `working_folder/`, 
+    then run the `reboot` toggle, and the new workbook will generate in the
+    `blank_form/` folder. This workbook can then be edited and run through the 
+    `metadata` toggle to create a new metadata file. 
+    
 
 ---
 

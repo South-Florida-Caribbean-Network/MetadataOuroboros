@@ -18,11 +18,20 @@ sheet_name <- "attributes"
 # Starting row (saves space for title and explanations)
 start_row <- 3
 
+# Using a placeholder string to make sure NAs are copied over properly.
+placeholder <- "##NA_PLACEHOLDER##"
+
 # Iterate through each attribute file
 for (txt_file in txt_files) {
   
-  # Read the file
-  data <- read_delim(txt_file, delim = "\t")
+  # Read raw text and substitute literal "NA" strings BEFORE parsing.
+  # Uses negative lookbehinds and negative lookaheads to make sure NA is not
+  # part of a word.
+  raw_text <- readLines(txt_file)
+  raw_text <- gsub('(?<!\\w)NA(?!\\w)', placeholder, raw_text, perl = TRUE)
+  
+  # Read the file (parse the substituted text as a TSV (true blanks stay blank))
+  data <- read_delim(I(paste(raw_text, collapse = "\n")), delim = "\t")
   
   # Write the file name in column A, same row as data, so you know which data comes from which csv
   writeData(wb, sheet = sheet_name, x = basename(txt_file), startCol = 1, startRow = start_row)
@@ -65,6 +74,10 @@ new_body <- insert_blank_rows(body)
 
 # Combine header + modified body
 final_data <- rbind(header, new_body)
+
+# Swap placeholder back to literal "NA" string
+final_data <- final_data %>%
+  mutate(across(everything(), ~ ifelse(. == placeholder, "NA", .)))
 
 # Write back into the same sheet
 writeData(wb, sheet = sheet_name, x = final_data, withFilter = FALSE)
@@ -135,6 +148,43 @@ writeData(
 )
 
 # Final save the workbook after all files have been processed
+saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
+
+
+# ---------------- Methods -----------------------------------------------------
+txt_file <- file.path(working_folder, "methods.txt")
+data <- paste(readLines(txt_file), collapse = "\n")
+writeData(wb, sheet = "methods", x = data, startCol = 2, startRow = 2, colNames = FALSE)
+saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
+
+# ---------------- Abstract ----------------------------------------------------
+txt_file <- file.path(working_folder, "abstract.txt")
+data <- paste(readLines(txt_file), collapse = "\n")
+writeData(wb, sheet = "abstract", x = data, startCol = 2, startRow = 2, colNames = FALSE)
+saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
+
+# ---------------- Additional Info ---------------------------------------------
+txt_file <- file.path(working_folder, "additional_info.txt")
+data <- paste(readLines(txt_file), collapse = "\n")
+writeData(wb, sheet = "additional_info", x = data, startCol = 2, startRow = 2, colNames = FALSE)
+saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
+
+# ---------------- Keywords ----------------------------------------------------
+txt_file <- file.path(working_folder, "keywords.txt")
+data <- read_delim(txt_file, delim = "\t")
+writeData(wb, sheet = "keywords", x = data, startCol = col2int("B"), startRow = 5, colNames = FALSE)
+saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
+
+# ---------------- Personnel ---------------------------------------------------
+txt_file <- file.path(working_folder, "personnel.txt")
+data <- read_delim(txt_file, delim = "\t")
+writeData(wb, sheet = "personnel", x = data, startCol = col2int("A"), startRow = 14, colNames = FALSE)
+saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
+
+# ---------------- Custom Units ------------------------------------------------
+txt_file <- file.path(working_folder, "custom_units.txt")
+data <- read_delim(txt_file, delim = "\t")
+writeData(wb, sheet = "custom_units", x = data, startCol = col2int("A"), startRow = 9, colNames = FALSE)
 saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
 
 ##### end #####
