@@ -62,11 +62,14 @@ You can also enable the following flags if your dataset includes:
     been approved.
     
 ### reboot    
-    `reboot` can be used to create an excel workbook out of filled out 
-    .txt files. Simply put the filled txt files in the `working_folder/`, 
-    then run the `reboot` toggle, and the new workbook will generate in the
-    `blank_form/` folder. This workbook can then be edited and run through the 
-    `metadata` toggle to create a new metadata file. 
+`reboot` can be used to create an excel workbook out of filled out .txt files. 
+
+1. Put the filled txt files in the `working_folder/`
+2. Run the `reboot` toggle
+3. The new workbook will generate in the`blank_form/` folder
+
+This workbook can then be edited and run through the `metadata` toggle to
+create a new metadata file. 
     
 
 ---
