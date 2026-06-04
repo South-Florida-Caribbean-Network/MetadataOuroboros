@@ -27,5 +27,5 @@ for (f in attr_files) {
       unit = case_when(class == "numeric" ~ "!Add units here!", .default = ""),
       dateTimeFormatString = case_when(class == "Date" ~ "!Add datetime specifier here!", .default = "")
     )
-  write.table(attributes_data, f, sep = "\t", row.names = FALSE, quote = FALSE)
+  write.table(attributes_data, f, sep = "\t", row.names = FALSE, quote = FALSE, na = "")
 }

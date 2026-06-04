@@ -94,10 +94,24 @@ sheet_name <- "catagorical_value_definitions"
 # starting row (saves space for title and explanations)
 start_row <- 2
 
+# Using a placeholder string to make sure NAs are copied over properly.
+placeholder <- "##NA_PLACEHOLDER##"
+
 # Iterate through each catvar file
 for (txt_file in txt_files) {
-  # Read the file
-  data <- read_delim(txt_file, delim = "\t")
+  
+  # Read raw text and substitute literal "NA" strings BEFORE parsing.
+  # Uses negative lookbehinds and negative lookaheads to make sure NA is not
+  # part of a word.
+  raw_text <- readLines(txt_file)
+  raw_text <- gsub('(?<!\\w)NA(?!\\w)', placeholder, raw_text, perl = TRUE)
+  
+  # Read the file (parse the substituted text as a TSV (true blanks stay blank))
+  data <- read_delim(I(paste(raw_text, collapse = "\n")), delim = "\t")
+  
+  # Swap placeholder back to literal "NA" string
+  data <- data %>%
+    mutate(across(everything(), ~ ifelse(. == placeholder, "NA", .)))
   
   # Write the file name in column A, same row as data, so you know which data comes from which csv
   writeData(wb, sheet = sheet_name, x = basename(txt_file), startCol = 1, startRow = start_row)

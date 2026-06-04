@@ -28,7 +28,7 @@ if (!is.null(file_to_open) && file.exists(file_to_open)) {
       unit = case_when(class == "numeric" ~ "!Add units here!", .default = ""),
       dateTimeFormatString = case_when(class == "Date" ~ "!Add datetime specifier here!", .default = "")
     )
-  write.table(attributes_data, file_to_open, sep = "\t", row.names = FALSE, quote = FALSE)
+  write.table(attributes_data, file_to_open, sep = "\t", row.names = FALSE, quote = FALSE, na = "")
 } else {
   message("No file selected or file does not exist.")
 }
