@@ -1,5 +1,6 @@
 # EMLassemblyline/EMLeditor/NPSdataverse workflow adapted by Katie Herrmann (2026)
 
+library(NPSdataverse)
 library(pak)
 library(lubridate)
 library(svDialogs)
@@ -21,12 +22,13 @@ data_descriptions <- character(length(data_files))
 
 #------------------- Toggle different workflows --------------------------------
 
-task     <- "reboot"   # "workbook" | "fix" | "metadata" | "reboot"
-geo_data <- FALSE         # only used when task == "workbook"
-tax_data <- TRUE         # only used when task == "workbook"
+task     <- "workbook"    # "workbook" | "fix" | "metadata" | "reboot"
+geo_data <- TRUE         # only used when task == "workbook"
+tax_data <- TRUE          # only used when task == "workbook"
+attribute_check <- TRUE   # turn on when you want to check your attribute classifications
 
 run_attribute_gen       <- task == "workbook"
-run_attribute_check     <- task == "workbook"
+run_attribute_check     <- task == "workbook" && attribute_check
 run_specific_attr_check <- task == "fix"
 run_delete_catvars      <- task == "fix"
 run_catvar_gen          <- task %in% c("workbook", "fix")
