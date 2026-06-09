@@ -29,6 +29,9 @@ You can also enable the following flags if your dataset includes:
 - `geo_data` — geospatial data
 - `tax_data` — taxonomic data
 
+Or you can turn off the attribute table checks using:
+- `attribute_check` - FALSE 
+
 ---
 
 ## How to Use
