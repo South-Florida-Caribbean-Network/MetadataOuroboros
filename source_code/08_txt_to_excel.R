@@ -27,7 +27,7 @@ for (txt_file in txt_files) {
   # Read raw text and substitute literal "NA" strings BEFORE parsing.
   # Uses negative lookbehinds and negative lookaheads to make sure NA is not
   # part of a word.
-  raw_text <- readLines(txt_file)
+  raw_text <- readLines(txt_file, encoding = "latin1")
   raw_text <- gsub('(?<!\\w)NA(?!\\w)', placeholder, raw_text, perl = TRUE)
   
   # Read the file (parse the substituted text as a TSV (true blanks stay blank))
@@ -103,7 +103,7 @@ for (txt_file in txt_files) {
   # Read raw text and substitute literal "NA" strings BEFORE parsing.
   # Uses negative lookbehinds and negative lookaheads to make sure NA is not
   # part of a word.
-  raw_text <- readLines(txt_file)
+  raw_text <- readLines(txt_file, encoding = "latin1")
   raw_text <- gsub('(?<!\\w)NA(?!\\w)', placeholder, raw_text, perl = TRUE)
   
   # Read the file (parse the substituted text as a TSV (true blanks stay blank))
