@@ -6,6 +6,8 @@ new_metadata_file <- file.path(dirname(working_folder), "blank_form", paste0(met
 success <- file.copy(metadata_template, new_metadata_file, overwrite = TRUE)
 if (!success) stop("Copy failed. Check path and permissions.")
 wb <- loadWorkbook(new_metadata_file)
+addStyle(wb, sheet = sheet_name, style = createStyle(locked = FALSE),
+         rows = 1:10000, cols = 1:50, gridExpand = TRUE, stack = TRUE)
 
 #-------------- Attributes txt to Excel ----------------------------------------
 
@@ -79,6 +81,12 @@ final_data <- rbind(header, new_body)
 final_data <- final_data %>%
   mutate(across(everything(), ~ ifelse(. == placeholder, "NA", .)))
 
+addStyle(wb, sheet = sheet_name, style = createStyle(locked = FALSE),
+         rows = 1:10000, cols = 1:50, gridExpand = TRUE, stack = TRUE)
+
+addStyle(wb, sheet = sheet_name, style = createStyle(locked = TRUE),
+         rows = 1:10000, cols = c(2, 4), gridExpand = TRUE, stack = TRUE)
+
 # Write back into the same sheet
 writeData(wb, sheet = sheet_name, x = final_data, withFilter = FALSE)
 
@@ -134,9 +142,15 @@ for (txt_file in txt_files) {
   # Update the start_row for the next entry. For some reason this doesn't have the same overwriting issue as attributes, so we don't need to rewrite things
   start_row <- start_row + nrow(data) + 2
   
+  addStyle(wb, sheet = sheet_name, style = createStyle(locked = FALSE),
+           rows = 1:10000, cols = 1:50, gridExpand = TRUE, stack = TRUE)
+  addStyle(wb, sheet = sheet_name, style = createStyle(locked = TRUE),
+           rows = 1:10000, cols = c(1, 2, 3), gridExpand = TRUE, stack = TRUE)
+  
   # Save state after each write to ensure it's reflected in the last_row calculation
   saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
 }
+
 #---------------------- Table Names and Descriptions ---------------------------
 
 # Need to keep certain columns from accidental editing.
