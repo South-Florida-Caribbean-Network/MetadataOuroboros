@@ -6,6 +6,31 @@
 # Requires: shiny, jsonlite, lubridate, readr
 # ============================================================================
 
+# ---- Auto-install any missing required packages before loading them -------
+# CRAN packages first.
+required_cran_packages <- c(
+  "shiny", "jsonlite", "lubridate", "readr", "shinyjs", "htmltools", "cli",
+  "svDialogs", "readxl", "dplyr", "tidyr", "openxlsx", "EMLassemblyline"
+)
+missing_cran <- required_cran_packages[!sapply(required_cran_packages, requireNamespace, quietly = TRUE)]
+if (length(missing_cran) > 0) {
+  message("Installing missing CRAN packages: ", paste(missing_cran, collapse = ", "))
+  install.packages(missing_cran)
+}
+
+# EMLeditor, EML, and DPchecker are not on CRAN — they come bundled together
+# in NPSdataverse, installed from GitHub via pak (same as the original script).
+if (!requireNamespace("pak", quietly = TRUE)) {
+  install.packages("pak")
+}
+
+if (!requireNamespace("EMLeditor", quietly = TRUE) ||
+    !requireNamespace("EML", quietly = TRUE) ||
+    !requireNamespace("DPchecker", quietly = TRUE)) {
+  message("Installing NPSdataverse (includes EMLeditor, EML, DPchecker) from GitHub...")
+  pak::pkg_install("nationalparkservice/NPSdataverse")
+}
+
 library(shiny)
 library(jsonlite)
 library(lubridate)
@@ -25,8 +50,6 @@ library(dplyr)
 library(tidyr)
 library(openxlsx)
 library(EMLassemblyline)
-# library(pak)  # only needed once, for installing NPSdataverse — not required at runtime
-# pak::pkg_install("nationalparkservice/NPSdataverse")
 
 CONFIG_PATH <- "workflow_config.json"
 
