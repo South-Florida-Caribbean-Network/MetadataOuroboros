@@ -17,7 +17,7 @@ library(cli)
 # ---- Pipeline dependencies ----
 # These match the library stack from the original flat workflow script.
 # They're loaded here so that scripts sourced from ./source_code/ during
-# "Run Pipeline" have the same functions available (e.g. dplyr's %>%) that
+# "Run" have the same functions available (e.g. dplyr's %>%) that
 # they would if the whole workflow were run as one flat script.
 library(svDialogs)
 library(readxl)
@@ -36,17 +36,19 @@ working_folder     <- "./working_folder"
 metadata_template  <- "./MetadataTemplate.xlsx"
 filled_form_folder <- "./filled_form"
 
-# ---- Helper: default config (mirrors your original hardcoded script) ------
+# ---- Helper: default config (generic starting point — not tied to any
+# specific project. Edit these if you want a different baseline, but none
+# of these values are required to be "correct" out of the box.) -----------
 default_config <- list(
-  task                   = "metadata",
+  task                   = "workbook",
   geo_data               = FALSE,
-  tax_data               = TRUE,
+  tax_data               = FALSE,
   
-  metadata_id            = "SFCN_Forest_Monitoring",
-  package_title          = "SFCN Forest Monitoring Protocol Data",
+  metadata_id            = "",
+  package_title          = "",
   data_type              = "complete",
-  park_units             = c("BICY", "EVER", "BISC", "DRTO", "BUIS", "SARI", "VIIS"),
-  producing_units        = c("SFCN"),
+  park_units             = character(0),
+  producing_units        = character(0),
   cui_code               = "PUBLIC",
   int_rights             = "public",
   language               = "English",
@@ -56,21 +58,28 @@ default_config <- list(
   doi                    = "",
   project                = "",
   
-  data_taxa_tables       = "2020-2025_SFCN_Forest_Diversity_v1.csv",
-  data_taxa_fields       = "harmonized_name",
+  data_taxa_tables       = "",
+  data_taxa_fields       = "",
   
-  data_coordinates_table = "BiscayneNP_CreelInterviewData.csv",
-  data_latitude          = "x_coord",
-  data_longitude         = "y_coord",
-  data_sitename          = "marker_point",
+  data_coordinates_table = "",
+  data_latitude          = "",
+  data_longitude         = "",
+  data_sitename          = "",
   
-  data_dates_table       = "2020-2025_SFCN_Forest_Events_v1.csv",
-  data_startdate_field   = "eval_date",
-  data_enddate_field     = "event_end_date"
+  data_dates_table       = "",
+  data_startdate_field   = "",
+  data_enddate_field     = ""
 )
 
 ALL_CUI_CODES  <- c("PUBLIC", "FED ONLY", "FEDCON", "DL ONLY", "NOCON")
 ALL_INT_RIGHTS <- c("public", "restricted", "CC0")
+
+TASK_LABELS <- c(
+  workbook = "1. Build Workbook",
+  fix      = "2. Edit Workbook",
+  metadata = "3. Create Metadata",
+  reboot   = "Rebuild Workbook (Advanced)"
+)
 
 # Load existing config if present, else use defaults
 load_config <- function() {
@@ -129,26 +138,30 @@ ui <- fluidPage(
     p("Step 1 of 2 — choose your workflow."),
     fluidRow(
       column(6,
-           wellPanel(
-  div(class = "section-title", "Workflow Toggle"),
-  selectInput("task", "task", choices = c("workbook", "fix", "metadata", "reboot")),
-  
-  tags$ul(style = "font-size:14.5px; color:#444; padding-left:18px;",
-    tags$li(tags$strong("workbook"), " – Start here. Builds the Excel metadata form from your CSVs."),
-    tags$li(tags$strong("fix"), " – Add, rename, reclass, or delete attributes after the workbook exists."),
-    tags$li(tags$strong("metadata"), " – Final step. Turns the filled-in Excel form into the EML file."),
-    tags$li(tags$strong("reboot"), " – Rebuilds the Excel workbook from existing txt files.")
-  ),
-  
-  conditionalPanel(
-    condition = "input.task == 'workbook'",
-    tags$hr(),
-    checkboxInput("geo_data", "geo_data", value = FALSE),
-    helpText("Include geographic coverage (coordinates/site names)."),
-    checkboxInput("tax_data", "tax_data", value = TRUE),
-    helpText("Include taxonomic coverage (species names column).")
-  )
-)
+             wellPanel(
+               div(class = "section-title", "Workflow Toggle"),
+               selectInput("task", "task",
+                           choices = c("1. Build Workbook" = "workbook",
+                                       "2. Edit Workbook" = "fix",
+                                       "3. Create Metadata" = "metadata",
+                                       "Rebuild Workbook (Advanced)" = "reboot")),
+               
+               tags$ul(style = "font-size:14.5px; color:#444; padding-left:18px;",
+                       tags$li(tags$strong("1. Build Workbook"), " – Start here. Builds the Excel metadata form from your CSVs."),
+                       tags$li(tags$strong("2. Edit Workbook"), " – Add, rename, reclass, or delete attributes after the workbook exists."),
+                       tags$li(tags$strong("3. Create Metadata"), " – Final step. Turns the filled-in Excel form into the EML file."),
+                       tags$li(tags$strong("Rebuild Workbook (Advanced)"), " – Rebuilds the Excel workbook from existing txt files.")
+               ),
+               
+               conditionalPanel(
+                 condition = "input.task == 'workbook' || input.task == 'metadata'",
+                 tags$hr(),
+                 checkboxInput("geo_data", "geo_data", value = FALSE),
+                 helpText("Include geographic coverage (coordinates/site names)."),
+                 checkboxInput("tax_data", "tax_data", value = TRUE),
+                 helpText("Include taxonomic coverage (species names column).")
+               )
+             )
       )
     ),
     div(class = "page-nav",
@@ -175,7 +188,7 @@ ui <- fluidPage(
       )
     ),
     
-    # ---- task == "metadata": Data Info ----
+    # ---- task == "metadata": Data Info + Date Info ----
     conditionalPanel(
       condition = "input.task == 'metadata'",
       fluidRow(
@@ -183,34 +196,94 @@ ui <- fluidPage(
                wellPanel(
                  div(class = "section-title", "Data Info"),
                  selectInput("data_type", "data_type", choices = c("ongoing", "complete")),
+                 helpText("Is this data collection finished, or will more data be added later?"),
                  textInput("park_units", "park_units (comma-separated)", value = ""),
+                 helpText("Four-letter park codes where this data applies, e.g. BICY, EVER."),
                  textInput("producing_units", "producing_units (comma-separated)", value = ""),
+                 helpText("The NPS network or unit(s) responsible for producing this data, e.g. SFCN."),
                  selectInput("cui_code", "cui_code", choices = ALL_CUI_CODES),
+                 helpText("Controlled Unclassified Information category. Use PUBLIC unless your data has access restrictions."),
                  selectInput("int_rights", "int_rights", choices = ALL_INT_RIGHTS),
+                 helpText("Who is allowed to use this data once published. Use public unless told otherwise."),
                  textInput("language", "language", value = "English")
+               )
+        )
+      ),
+      fluidRow(
+        column(6,
+               div(id = "taxonomy_section_md",
+                   wellPanel(
+                     div(class = "section-title", "Taxonomy Info"),
+                     selectInput("data_taxa_tables", "data_taxa_tables (file)", choices = character(0)),
+                     selectInput("data_taxa_fields", "data_taxa_fields (column)", choices = character(0))
+                   )
+               )
+        ),
+        column(6,
+               div(id = "geospatial_section_md",
+                   wellPanel(
+                     div(class = "section-title", "Geospatial Info"),
+                     selectInput("data_coordinates_table", "data_coordinates_table (file)", choices = character(0)),
+                     selectInput("data_latitude", "data_latitude (column)", choices = character(0)),
+                     selectInput("data_longitude", "data_longitude (column)", choices = character(0)),
+                     selectInput("data_sitename", "data_sitename (column)", choices = character(0))
+                   )
                )
         )
       ),
       fluidRow(
         column(12,
                wellPanel(
-                 div(class = "section-title", "Publishing"),
+                 div(class = "section-title", "Date Info"),
+                 selectInput("data_dates_table", "data_dates_table (file)", choices = character(0)),
+                 selectInput("data_startdate_field", "data_startdate_field (column)", choices = character(0)),
+                 selectInput("data_enddate_field", "data_enddate_field (column)", choices = character(0)),
+                 actionButton("calc_dates", "Calculate start/end dates", icon = icon("calendar"), width = "100%"),
+                 uiOutput("date_range_output")
+               )
+        )
+      ),
+      fluidRow(
+        column(12,
+               wellPanel(
+                 style = "border: 2px solid #e8a33d;",
+                 div(class = "section-title", style = "color:#b5651d; border-bottom-color:#e8a33d;", "⚠️ Publishing"),
+                 div(style = "background:#fff6e5; border:1px solid #f0c674; border-radius:6px; padding:14px 16px; margin-bottom:14px;",
+                     tags$p(style = "color:#8a5a00; font-size:15.5px; font-weight:600; margin-bottom:6px;",
+                            "⚠️ This is the final, publishing step."),
+                     tags$p(style = "color:#7a5200; font-size:14.5px; margin-bottom:0;",
+                            "Checking \"Ready to Publish\" sets a permanent DataStore DOI/project on this metadata, and — ",
+                            "if you also check \"upload the data package\" — uploads your data files to DataStore. ",
+                            "Once published, this is not something you can casually undo. Only do this once the metadata ",
+                            "is fully finalized and reviewed/approved.")
+                 ),
                  checkboxInput("ready_to_publish", "Ready to Publish", value = FALSE),
-                 p(style = "color:#555; font-size:15px;",
-                   "When unchecked, the pipeline will build and write the EML file but will ",
-                   "NOT set a DataStore DOI/project or upload the data package — those steps are ",
-                   "skipped entirely. Check this only once the metadata is finalized and approved."),
                  conditionalPanel(
                    condition = "input.ready_to_publish == true",
-                   textInput("datastore_doi", "datastore_doi", value = ""),
-                   textInput("doi", "doi", value = ""),
-                   textInput("project", "project (DataStore Reference ID)", value = ""),
-                   tags$hr(),
-                   checkboxInput("upload_data_package", "Also upload the data package to DataStore", value = FALSE),
-                   helpText("Unchecked: the DOI/project are set, but nothing is uploaded. ",
-                            "Checked: the data package files are uploaded as well.")
+                   div(style = "background:#fdecea; border:1px solid #f1a9a0; border-radius:6px; padding:12px 16px; margin:10px 0 14px 0;",
+                       checkboxInput("confirm_publish", 
+                                     tags$span(style="color:#a12a1a; font-weight:600;",
+                                               "I understand this will finalize and publish this data package, and that this cannot be easily undone."),
+                                     value = FALSE)
+                   ),
+                   conditionalPanel(
+                     condition = "input.confirm_publish == true",
+                     textInput("datastore_doi", "datastore_doi", value = ""),
+                     textInput("doi", "doi", value = ""),
+                     textInput("project", "project (DataStore Reference ID)", value = ""),
+                     tags$hr(),
+                     checkboxInput("upload_data_package", 
+                                   tags$span(style = "font-weight:700;", "Also upload the data package to DataStore"), 
+                                   value = FALSE),
+                     helpText("Unchecked: the DOI/project are set, but nothing is uploaded. ",
+                              "Checked: the data package files are uploaded as well.")
+                   ),
+                   conditionalPanel(
+                     condition = "input.confirm_publish == false",
+                     tags$p(style = "color:#a12a1a; font-size:14px; font-style:italic;",
+                            "Check the confirmation box above to reveal publishing fields.")
+                   )
                  )
-                 
                )
         )
       ),
@@ -219,8 +292,11 @@ ui <- fluidPage(
                wellPanel(
                  div(class = "section-title", "Run Checks"),
                  p(style = "color:#555; font-size:15px;",
-                   "Optional, independent of Run Pipeline. Requires that 10_EML_creation.R has ",
+                   "Optional, independent of Run. Requires that 10_EML_creation.R has ",
                    "already been run at least once so metadata_id_metadata.xml exists."),
+                 p(style = "color:#777; font-size:14px;",
+                   "If something looks off here, check the Excel workbook's attributes tab first — ",
+                   "most issues come from incomplete attribute or missing-value info."),
                  fluidRow(
                    column(6, actionButton("run_eml_validate_btn", "🔎 Run EML Validate", width = "100%")),
                    column(6, actionButton("run_dpchecker_btn", "🔎 Run DPchecker Congruence Checks", width = "100%"))
@@ -234,11 +310,13 @@ ui <- fluidPage(
       )
     ),
     
-    # ---- task == "workbook": Taxonomy / Geospatial / Date Info ----
+    # ---- task == "workbook": Taxonomy / Geospatial Info. (metadata's
+    # equivalent copy lives above, ordered before Date Info, with its own
+    # wrapper IDs since both tasks share the same underlying input IDs.) ----
     conditionalPanel(
       condition = "input.task == 'workbook'",
       fluidRow(
-        column(4,
+        column(6,
                div(id = "taxonomy_section",
                    wellPanel(
                      div(class = "section-title", "Taxonomy Info"),
@@ -247,7 +325,7 @@ ui <- fluidPage(
                    )
                )
         ),
-        column(4,
+        column(6,
                div(id = "geospatial_section",
                    wellPanel(
                      div(class = "section-title", "Geospatial Info"),
@@ -256,16 +334,6 @@ ui <- fluidPage(
                      selectInput("data_longitude", "data_longitude (column)", choices = character(0)),
                      selectInput("data_sitename", "data_sitename (column)", choices = character(0))
                    )
-               )
-        ),
-        column(4,
-               wellPanel(
-                 div(class = "section-title", "Date Info"),
-                 selectInput("data_dates_table", "data_dates_table (file)", choices = character(0)),
-                 selectInput("data_startdate_field", "data_startdate_field (column)", choices = character(0)),
-                 selectInput("data_enddate_field", "data_enddate_field (column)", choices = character(0)),
-                 actionButton("calc_dates", "Calculate start/end dates", icon = icon("calendar"), width = "100%"),
-                 uiOutput("date_range_output")
                )
         )
       )
@@ -282,7 +350,7 @@ ui <- fluidPage(
                    "Syncs from the filled Excel workbook (excel → txt), lets you queue up ",
                    "add/rename/reclass/delete edits below, then rebuilds the workbook (txt → excel) ",
                    "when you click Apply Fixes."),
-                 actionButton("sync_from_excel_btn", "🔄 Sync from Excel (run excel → txt)", width = "320px"),
+                 actionButton("sync_from_excel_btn", "🔄 Sync from Excel", width = "320px"),
                  uiOutput("fix_sync_status")
                )
         )
@@ -339,7 +407,7 @@ ui <- fluidPage(
                  div(class = "section-title", "Pending Edits Queue"),
                  uiOutput("fix_queue_box"),
                  br(),
-                 actionButton("apply_fixes_btn", "✅ Apply Fixes (run txt edits + rebuild Excel)", class = "btn-primary", width = "420px"),
+                 actionButton("apply_fixes_btn", "✅ Apply Fixes", class = "btn-primary", width = "420px"),
                  br(), br(),
                  tags$pre(id = "fix_log_box",
                           style = "background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:6px; font-size:14px; max-height:260px; overflow-y:auto; white-space:pre-wrap;",
@@ -352,7 +420,7 @@ ui <- fluidPage(
     div(class = "page-nav",
         actionButton("to_page1", "← Back", width = "160px"),
         conditionalPanel(
-          condition = "input.task == 'workbook'",
+          condition = "input.task == 'workbook' || input.task == 'metadata'",
           actionButton("rescan_btn", "🔄 Re-scan folder", width = "200px")
         )
     ),
@@ -363,7 +431,7 @@ ui <- fluidPage(
       fluidRow(
         column(12,
                wellPanel(
-                 div(class = "section-title", "Reboot"),
+                 div(class = "section-title", "Rebuild Workbook"),
                  p(style = "color:#555; font-size:15px;",
                    "Rebuilds the Excel workbook directly from the existing txt files in working_folder. ",
                    "No other setup needed — just click Run below.")
@@ -377,17 +445,18 @@ ui <- fluidPage(
       fluidRow(
         column(12,
                wellPanel(
-                 div(class = "section-title", "Run Pipeline"),
+                 div(class = "section-title", "Run"),
                  conditionalPanel(
                    condition = "input.task == 'workbook'",
                    p(style = "color:#555; font-size:15px;",
-                     "Runs the numbered scripts in ./source_code based on your current task/toggles. ",
+                     "Builds your Excel workbook based on your current settings above. ",
                      "Some steps may open interactive dialogs/tables outside the browser (e.g. in RStudio) — ",
                      "watch the R console and resolve those before continuing.")
                  ),
                  actionButton("run_pipeline_btn", "▶ Run", class = "btn-primary", width = "260px"),
+                 uiOutput("publish_run_warning"),
                  br(), br(),
-                 tags$div(id = "pipeline_steps_box", class = "derived-box", "No pipeline run yet."),
+                 tags$div(id = "pipeline_steps_box", class = "derived-box", "No run yet."),
                  br(),
                  tags$pre(id = "pipeline_log_box",
                           style = "background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:6px; font-size:14px; max-height:300px; overflow-y:auto; white-space:pre-wrap;",
@@ -403,6 +472,8 @@ ui <- fluidPage(
       column(12,
              wellPanel(
                div(class = "section-title", "Save / Load / Export"),
+               p(style = "color:#555; font-size:15px; font-style:italic;",
+                 "Tired of filling in fields over and over again? Save your settings here!"),
                fluidRow(
                  column(3, actionButton("save_btn", "💾 Save answers to JSON", width = "100%", class = "btn-primary")),
                  column(3, actionButton("load_btn", "📂 Reload saved JSON", width = "100%")),
@@ -430,12 +501,50 @@ server <- function(input, output, session) {
   output$current_page <- reactive({ page() })
   outputOptions(output, "current_page", suspendWhenHidden = FALSE)
   
-  output$current_task_label <- renderText(input$task)
+  output$current_task_label <- renderText(TASK_LABELS[[input$task]])
   
-  # ---- Initialize UI from loaded config (page 1 + page 2 shared fields) ----
+  # ---- Flip the Run button to a red "Publish" state once the user has
+  # checked Ready to Publish AND the explicit confirmation checkbox. This is
+  # purely visual/label — the actual publish logic is still gated by
+  # ready_to_publish + confirm_publish being read in build_config()/the
+  # pipeline runner, same as before. ----
   observe({
-    c0 <- isolate(cfg())
-    updateSelectInput(session, "task", selected = c0$task)
+    armed <- isTRUE(input$task == "metadata") &&
+      isTRUE(input$ready_to_publish) &&
+      isTRUE(input$confirm_publish)
+    if (armed) {
+      updateActionButton(session, "run_pipeline_btn", label = "🚀 Publish")
+      shinyjs::runjs("
+        var btn = document.getElementById('run_pipeline_btn');
+        if (btn) { btn.style.backgroundColor = '#c0392b'; btn.style.borderColor = '#a93226'; }
+      ")
+    } else {
+      updateActionButton(session, "run_pipeline_btn", label = "▶ Run")
+      shinyjs::runjs("
+        var btn = document.getElementById('run_pipeline_btn');
+        if (btn) { btn.style.backgroundColor = ''; btn.style.borderColor = ''; }
+      ")
+    }
+  })
+  
+  output$publish_run_warning <- renderUI({
+    armed <- isTRUE(input$task == "metadata") &&
+      isTRUE(input$ready_to_publish) &&
+      isTRUE(input$confirm_publish)
+    if (armed) {
+      tags$p(style = "color:#c0392b; font-size:14px; font-weight:600; margin-top:8px;",
+             "🚀 Clicking Publish will finalize and publish this data package.")
+    }
+  })
+  
+  # ---- Push a config list into all the UI inputs ----
+  # keep_task = FALSE only on initial app load (use the loaded config's task).
+  # On manual Reset, we deliberately leave the current task selection alone —
+  # clearing fields shouldn't yank the user out of whatever step they're on.
+  apply_config_to_inputs <- function(c0, keep_task = TRUE) {
+    if (!keep_task) {
+      updateSelectInput(session, "task", selected = c0$task)
+    }
     updateCheckboxInput(session, "geo_data", value = isTRUE(c0$geo_data))
     updateCheckboxInput(session, "tax_data", value = isTRUE(c0$tax_data))
     updateTextInput(session, "metadata_id", value = c0$metadata_id)
@@ -451,12 +560,17 @@ server <- function(input, output, session) {
     updateTextInput(session, "datastore_doi", value = c0$datastore_doi)
     updateTextInput(session, "doi", value = c0$doi)
     updateTextInput(session, "project", value = c0$project)
+  }
+  
+  # ---- Initialize UI from loaded config on startup ----
+  observe({
+    apply_config_to_inputs(isolate(cfg()), keep_task = FALSE)
   })
   
   # ---- Page navigation ----
   observeEvent(input$to_page2, {
     page(2)
-    if (input$task == "workbook") {
+    if (input$task %in% c("workbook", "metadata")) {
       do_scan(preserve_selection = TRUE)
     }
   })
@@ -470,30 +584,20 @@ server <- function(input, output, session) {
   observe({
     if (isTRUE(input$tax_data)) {
       shinyjs::show(id = "taxonomy_section")
+      shinyjs::show(id = "taxonomy_section_md")
     } else {
       shinyjs::hide(id = "taxonomy_section")
+      shinyjs::hide(id = "taxonomy_section_md")
     }
   })
   
   observe({
     if (isTRUE(input$geo_data)) {
       shinyjs::show(id = "geospatial_section")
+      shinyjs::show(id = "geospatial_section_md")
     } else {
       shinyjs::hide(id = "geospatial_section")
-    }
-  })
-  
-  output$taxonomy_disabled_note <- renderUI({
-    if (!isTRUE(input$tax_data)) {
-      tags$p(style = "color:#9aa3ad; font-size:12px; font-style:italic;",
-             "tax_data is unchecked on page 1 — these fields won't be used, but your answers are kept.")
-    }
-  })
-  
-  output$geospatial_disabled_note <- renderUI({
-    if (!isTRUE(input$geo_data)) {
-      tags$p(style = "color:#9aa3ad; font-size:12px; font-style:italic;",
-             "geo_data is unchecked on page 1 — these fields won't be used, but your answers are kept.")
+      shinyjs::hide(id = "geospatial_section_md")
     }
   })
   
@@ -630,7 +734,6 @@ server <- function(input, output, session) {
   ATTR_COLS <- c("attributeName", "attributeDefinition", "class", "unit",
                  "dateTimeFormatString", "missingValueCode", "missingValueCodeExplanation")
   
-  fix_tables <- reactiveVal(character(0))   # table base names, e.g. "2020-2025_SFCN_Forest_Diversity_v1"
   fix_queue  <- reactiveVal(list())         # list of pending edit operations
   
   attr_file_for   <- function(tbl) file.path(working_folder, paste0("attributes_", tbl, ".txt"))
@@ -666,7 +769,6 @@ server <- function(input, output, session) {
   refresh_fix_tables <- function() {
     files <- list.files(working_folder, pattern = "^attributes_.*\\.txt$", full.names = FALSE)
     tbls <- sub("^attributes_", "", sub("\\.txt$", "", files))
-    fix_tables(tbls)
     updateSelectInput(session, "add_table", choices = tbls)
     updateSelectInput(session, "rename_table", choices = tbls)
     updateSelectInput(session, "reclass_table", choices = tbls)
@@ -955,6 +1057,7 @@ server <- function(input, output, session) {
       int_rights             = input$int_rights,
       language               = input$language,
       ready_to_publish       = input$ready_to_publish,
+      confirm_publish        = input$confirm_publish,
       upload_data_package    = input$upload_data_package,
       datastore_doi          = input$datastore_doi,
       doi                    = input$doi,
@@ -982,13 +1085,18 @@ server <- function(input, output, session) {
   observeEvent(input$load_btn, {
     loaded <- load_config()
     cfg(loaded)
+    apply_config_to_inputs(loaded, keep_task = FALSE)
     status(paste("📂 Reloaded from", CONFIG_PATH, "at", format(Sys.time(), "%H:%M:%S")))
   })
   
   # ---- Reset ----
   observeEvent(input$reset_btn, {
     cfg(default_config)
-    status("↺ Reset to defaults (not yet saved).")
+    apply_config_to_inputs(default_config, keep_task = TRUE)
+    if (page() == 2 && input$task %in% c("workbook", "metadata")) {
+      do_scan(preserve_selection = TRUE)
+    }
+    status("↺ Reset to defaults (not yet saved). Your current step was left as-is.")
   })
   
   output$status_msg <- renderText(status())
@@ -1002,19 +1110,19 @@ server <- function(input, output, session) {
   )
   
   # ==========================================================================
-  # ---- Run Pipeline: sources 01-10 source_code scripts based on config ----
+  # ---- Run: sources 01-10 source_code scripts based on config ----
   # ==========================================================================
   # Progress is written directly to the DOM via shinyjs::html() rather than
   # through reactiveVal + renderUI/renderText. Reactive outputs only repaint
   # once Shiny's event loop flushes, which happens after the whole
   # observeEvent finishes — since source() runs synchronously in a loop here,
-  # that would mean no visible updates until the entire pipeline is done.
+  # that would mean no visible updates until the entire run is done.
   # Direct DOM writes happen immediately, so the log/step list update live.
   step_status <- new.env()
   
   render_steps_html <- function() {
     ids <- ls(step_status)
-    if (length(ids) == 0) return("No pipeline run yet.")
+    if (length(ids) == 0) return("No run yet.")
     icon_for <- function(s) switch(s, running = "⏳", done = "✅", skipped = "⏭️", error = "❌", "•")
     lines <- vapply(ids, function(id) sprintf("%s %s", icon_for(get(id, envir = step_status)), id), character(1))
     paste(lines, collapse = "<br>")
@@ -1035,7 +1143,7 @@ server <- function(input, output, session) {
   observeEvent(input$run_pipeline_btn, {
     rm(list = ls(step_status), envir = step_status)
     log_lines <<- character(0)
-    shinyjs::html(id = "pipeline_steps_box", html = "No pipeline run yet.")
+    shinyjs::html(id = "pipeline_steps_box", html = "No run yet.")
     shinyjs::html(id = "pipeline_log_box", html = "")
     shinyjs::html(id = "pipeline_done_banner", html = "")
     shinyjs::hide(id = "pipeline_done_banner")
@@ -1060,8 +1168,8 @@ server <- function(input, output, session) {
     run_specific_attr_check <- c0$task == "fix"
     run_delete_catvars      <- c0$task == "fix"
     run_catvar_gen          <- c0$task %in% c("workbook", "fix")
-    run_geospatial_gen      <- c0$task == "workbook" && isTRUE(c0$geo_data)
-    run_taxonomy_gen        <- c0$task == "workbook" && isTRUE(c0$tax_data)
+    run_geospatial_gen      <- c0$task %in% c("workbook", "metadata") && isTRUE(c0$geo_data)
+    run_taxonomy_gen        <- c0$task %in% c("workbook", "metadata") && isTRUE(c0$tax_data)
     run_txt_to_excel        <- c0$task %in% c("workbook", "fix", "reboot")
     run_excel_to_txt        <- c0$task == "metadata"
     run_eml_creation        <- c0$task == "metadata"
@@ -1085,8 +1193,8 @@ server <- function(input, output, session) {
     assign("cui_code", c0$cui_code, envir = .GlobalEnv)
     assign("int_rights", c0$int_rights, envir = .GlobalEnv)
     assign("language", c0$language, envir = .GlobalEnv)
-    assign("ready_to_publish", isTRUE(c0$ready_to_publish), envir = .GlobalEnv)
-    assign("upload_data_package", isTRUE(c0$ready_to_publish) && isTRUE(c0$upload_data_package), envir = .GlobalEnv)
+    assign("ready_to_publish", isTRUE(c0$ready_to_publish) && isTRUE(c0$confirm_publish), envir = .GlobalEnv)
+    assign("upload_data_package", isTRUE(c0$ready_to_publish) && isTRUE(c0$confirm_publish) && isTRUE(c0$upload_data_package), envir = .GlobalEnv)
     assign("datastore_doi", c0$datastore_doi, envir = .GlobalEnv)
     assign("doi", c0$doi, envir = .GlobalEnv)
     assign("project", c0$project, envir = .GlobalEnv)
@@ -1105,7 +1213,7 @@ server <- function(input, output, session) {
     
     assign("data_urls", rep("temporary URL", length(list.files(working_folder, pattern = "*.csv"))), envir = .GlobalEnv)
     
-    append_log(paste("▶ Pipeline started at", format(Sys.time(), "%H:%M:%S")))
+    append_log(paste("▶ Run started at", format(Sys.time(), "%H:%M:%S")))
     append_log(paste("  task =", c0$task, "| geo_data =", c0$geo_data, "| tax_data =", c0$tax_data))
     
     # ---- 2. Compute dates_df / startdate / enddate, same as original script ----
@@ -1150,7 +1258,7 @@ server <- function(input, output, session) {
       script_path <- file.path("source_code", s$id)
       if (!file.exists(script_path)) {
         set_step(s$id, "error")
-        append_log(paste("❌", s$id, "not found at", script_path, "— stopping pipeline."))
+        append_log(paste("❌", s$id, "not found at", script_path, "— stopping."))
         pipeline_failed <- TRUE
         break
       }
@@ -1168,27 +1276,27 @@ server <- function(input, output, session) {
         append_log(paste("✅ Finished", s$id))
       } else {
         set_step(s$id, "error")
-        append_log("Pipeline stopped due to error above.")
+        append_log("Run stopped due to error above.")
         pipeline_failed <- TRUE
         break
       }
     }
     
-    append_log(paste("■ Pipeline run ended at", format(Sys.time(), "%H:%M:%S")))
+    append_log(paste("■ Run ended at", format(Sys.time(), "%H:%M:%S")))
     
     if (pipeline_failed) {
       shinyjs::html(id = "pipeline_done_banner",
-                    html = "❌ <strong>Pipeline stopped due to an error.</strong> Check the log above, fix the issue, and click Run Pipeline again.")
+                    html = "❌ <strong>Run stopped due to an error.</strong> Check the log above, fix the issue, and click Run again.")
       shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#fdecea; color:#c0392b; padding:14px 18px; border-radius:6px; font-size:16px; margin-top:4px;';")
     } else {
       shinyjs::html(id = "pipeline_done_banner",
-                    html = "✅ <strong>Pipeline finished running.</strong> You can close this window now.")
+                    html = "✅ <strong>Run finished.</strong> You can close this window now.")
       shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#eafaf1; color:#1e8449; padding:14px 18px; border-radius:6px; font-size:16px; margin-top:4px;';")
     }
   })
   
   # ==========================================================================
-  # ---- Run Checks: EML validate / DPchecker, independent of Run Pipeline ----
+  # ---- Run Checks: EML validate / DPchecker, independent of Run ----
   # ==========================================================================
   checks_log <- character(0)
   append_checks_log <- function(msg, raw = FALSE) {
@@ -1220,7 +1328,7 @@ server <- function(input, output, session) {
     xml_path <- get_xml_path()
     append_checks_log(paste("▶ Running EML::eml_validate() at", format(Sys.time(), "%H:%M:%S")))
     if (!file.exists(xml_path)) {
-      append_checks_log(paste("❌ File not found:", xml_path, "— run the pipeline (task = metadata) first."))
+      append_checks_log(paste("❌ File not found:", xml_path, "— run Create Metadata first."))
       return(invisible())
     }
     result <- tryCatch({
@@ -1242,7 +1350,7 @@ server <- function(input, output, session) {
     xml_path <- get_xml_path()
     append_checks_log(paste("▶ Running DPchecker::run_congruence_checks() at", format(Sys.time(), "%H:%M:%S")))
     if (!file.exists(xml_path)) {
-      append_checks_log(paste("❌ File not found:", xml_path, "— run the pipeline (task = metadata) first."))
+      append_checks_log(paste("❌ File not found:", xml_path, "— run Create Metadata first."))
       return(invisible())
     }
     xml_working <- file.path(working_folder, basename(xml_path))
