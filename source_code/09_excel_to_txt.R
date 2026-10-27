@@ -1,6 +1,19 @@
-
 ##### EXCEL TO TXT ##### #####
 
+#### helper: clean embedded newlines/tabs/control chars from free text ####
+# Excel cells with alt+enter line breaks come in as literal \r\n, which breaks
+# downstream parsing once we write tab-delimited txt files. This collapses
+# any embedded line breaks/tabs/control characters down to single spaces.
+clean_text <- function(x) {
+  x <- as.character(x)
+  x <- gsub("\r\n", " ", x)
+  x <- gsub("\r", " ", x)
+  x <- gsub("\n", " ", x)
+  x <- gsub("\t", " ", x)        # catch stray tabs too, since we tab-delimit
+  x <- gsub("\\s+", " ", x)
+  x <- gsub("[[:cntrl:]]", "", x)
+  trimws(x)
+}
 
 #### cat vars ####
 
@@ -25,7 +38,8 @@ colnames(metadata) <- c("txt_file_name", "attributeName", "code", "definition")
 metadata <- metadata %>%
   fill(txt_file_name, .direction = "down") %>%
   filter(!is.na(txt_file_name)) %>%
-  filter(!(is.na(attributeName) & is.na(code) & is.na(definition)))
+  filter(!(is.na(attributeName) & is.na(code) & is.na(definition))) %>%
+  mutate(across(c(attributeName, code, definition), clean_text))
 
 # Function to process and write data for each txt file
 process_and_write_txt <- function(file_name, data) {
@@ -162,8 +176,14 @@ keywords_data <- read_excel(metadata_file, sheet = sheet_name, range = "B4:C104"
 # Drop rows where both columns are empty
 keywords_data <- keywords_data[rowSums(is.na(keywords_data)) != ncol(keywords_data), ]
 
-# Convert to character to avoid factors/NA issues
-keywords_data[] <- lapply(keywords_data, function(x) as.character(na.omit(x)))
+# Convert to character, preserving row alignment 
+keywords_data[] <- lapply(keywords_data, as.character)
+
+# Replace NA with empty strings so blanks are preserved as "" rather than "NA"
+keywords_data[is.na(keywords_data)] <- ""
+
+# Clean any embedded line breaks/tabs in free text columns
+keywords_data[] <- lapply(keywords_data, clean_text)
 
 # Write out as two columns, tab-separated
 write.table(
@@ -188,6 +208,9 @@ custom_units_data <- custom_units_data[rowSums(is.na(custom_units_data)) != ncol
 # Convert to character to avoid factors/NA issues
 custom_units_data[] <- lapply(custom_units_data, function(x) as.character(na.omit(x)))
 
+# Clean any embedded line breaks/tabs in free text columns
+custom_units_data[] <- lapply(custom_units_data, clean_text)
+
 # Write out as two columns, tab-separated
 write.table(
   custom_units_data,
@@ -210,6 +233,9 @@ personnel_data <- personnel_data[rowSums(is.na(personnel_data)) != ncol(personne
 
 # Convert everything to character
 personnel_data <- data.frame(lapply(personnel_data, as.character), stringsAsFactors = FALSE)
+
+# Clean any embedded line breaks/tabs in free text columns
+personnel_data <- data.frame(lapply(personnel_data, clean_text), stringsAsFactors = FALSE)
 
 # Write out as tab-separated text
 write.table(
@@ -253,8 +279,14 @@ metadata <- metadata %>%
   fill(txt_file_name, .direction = "down")
 
 # Ensure character type for consistent output (do NOT drop NAs)
+# and clean embedded line breaks/tabs in free text fields
 metadata <- metadata %>%
-  mutate(across(everything(), ~ as.character(.)))
+  mutate(across(everything(), ~ as.character(.))) %>%
+  mutate(across(
+    c(attributeName, attributeDefinition, class, unit,
+      dateTimeFormatString, missingValueCode, missingValueCodeExplanation),
+    clean_text
+  ))
 
 # Keep rows where txt_file_name exists AND at least one attribute field is non-empty.
 # This preserves literal "(blank)" and "NA" text, only dropping true NA/"" empties.

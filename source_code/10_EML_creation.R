@@ -25,14 +25,18 @@ my_metadata <- EMLeditor::set_producing_units(my_metadata, producing_units)
 my_metadata <- EMLeditor::set_language(my_metadata,
                                        language)
 
-# For demo purposes, this is turned off:
-#my_metadata <- EMLeditor::set_datastore_doi(my_metadata)
 
 # where "1234567" is the DataStore Reference id for the Project
 # that the data package should be linked to.
-#my_metadata <- EMLeditor::set_project(my_metadata, 1234567)
-
-#EMLeditor::upload_data_package()
+if (ready_to_publish) {
+  my_metadata <- EMLeditor::set_datastore_doi(my_metadata, datastore_doi)
+  my_metadata <- EMLeditor::set_doi(my_metadata, doi)
+  my_metadata <- EMLeditor::set_project(my_metadata, project)
+  
+  if (isTRUE(upload_data_package)) {
+    EMLeditor::upload_data_package()
+  }
+}
 
 EML::eml_validate(my_metadata)
 
@@ -56,3 +60,12 @@ DPchecker::run_congruence_checks(directory = working_folder)
 
 # Clean up copy from working_folder.
 file.remove(xml_working)
+
+
+
+xml_text <- readLines(xml_main, warn = FALSE)
+xml_text <- gsub("<alternateIdentifier>doi: ", "<alternateIdentifier>", xml_text)
+writeLines(xml_text, xml_main)
+
+# confirm it's fixed
+grep("alternateIdentifier", readLines(xml_main, warn = FALSE), value = TRUE)
