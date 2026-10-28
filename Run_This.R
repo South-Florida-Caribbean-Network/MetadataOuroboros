@@ -7,7 +7,6 @@
 # ============================================================================
 
 # ---- Auto-install any missing required packages before loading them -------
-# CRAN packages first.
 required_cran_packages <- c(
   "shiny", "jsonlite", "lubridate", "readr", "shinyjs", "htmltools", "cli",
   "svDialogs", "readxl", "dplyr", "tidyr", "openxlsx", "EMLassemblyline"
@@ -18,8 +17,6 @@ if (length(missing_cran) > 0) {
   install.packages(missing_cran)
 }
 
-# EMLeditor, EML, and DPchecker are not on CRAN — they come bundled together
-# in NPSdataverse, installed from GitHub via pak (same as the original script).
 if (!requireNamespace("pak", quietly = TRUE)) {
   install.packages("pak")
 }
@@ -39,11 +36,6 @@ library(shinyjs)
 library(htmltools)
 library(cli)
 
-# ---- Pipeline dependencies ----
-# These match the library stack from the original flat workflow script.
-# They're loaded here so that scripts sourced from ./source_code/ during
-# "Run" have the same functions available (e.g. dplyr's %>%) that
-# they would if the whole workflow were run as one flat script.
 library(svDialogs)
 library(readxl)
 library(dplyr)
@@ -53,15 +45,10 @@ library(EMLassemblyline)
 
 CONFIG_PATH <- "workflow_config.json"
 
-# ---- Hardcoded paths (no GUI for these — edit directly if your folder
-# layout differs from the defaults below) ----
 working_folder     <- "./working_folder"
 metadata_template  <- "./MetadataTemplate.xlsx"
 filled_form_folder <- "./filled_form"
 
-# ---- Helper: default config (generic starting point — not tied to any
-# specific project. Edit these if you want a different baseline, but none
-# of these values are required to be "correct" out of the box.) -----------
 default_config <- list(
   task                   = "workbook",
   geo_data               = FALSE,
@@ -77,7 +64,8 @@ default_config <- list(
   language               = "English",
   ready_to_publish       = FALSE,
   upload_data_package    = FALSE,
-  datastore_doi          = "",
+  doi_mode               = "new",
+  ds_ref_code            = "",
   doi                    = "",
   project                = "",
   
@@ -104,7 +92,6 @@ TASK_LABELS <- c(
   reboot   = "Rebuild Workbook (Advanced)"
 )
 
-# Load existing config if present, else use defaults
 load_config <- function() {
   if (file.exists(CONFIG_PATH)) {
     cfg <- tryCatch(jsonlite::fromJSON(CONFIG_PATH, simplifyVector = TRUE),
@@ -128,6 +115,23 @@ ui <- fluidPage(
       var el = document.getElementById(msg.id);
       if (el) { el.scrollTop = el.scrollHeight; }
     });
+    Shiny.addCustomMessageHandler('flash-queued', function(msg) {
+      var el = document.getElementById(msg.id);
+      if (el) {
+        var original = el.innerHTML;
+        el.classList.add('btn-queued');
+        setTimeout(function() {
+          el.classList.remove('btn-queued');
+        }, msg.duration || 1500);
+      }
+    });
+  ")),
+  tags$script(HTML("
+    $(document).on('click', '.reorder-btn', function() {
+      var id = $(this).attr('id');
+      if (!id) return;
+      Shiny.setInputValue(id, Math.random(), {priority: 'event'});
+    });
   ")),
   tags$head(tags$style(HTML("
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -135,7 +139,7 @@ ui <- fluidPage(
     * { box-sizing: border-box; }
     
     body {
-      background: linear-gradient(135deg, #f7f5ef 0%, #f3f0e6 50%, #eef2ea 100%);
+      background: linear-gradient(135deg, #f8f6f0 0%, #f6f3ea 50%, #f5f7f1 100%);
       background-attachment: fixed;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 18px;
@@ -147,17 +151,14 @@ ui <- fluidPage(
     .title-panel-custom {
       font-weight: 800;
       font-size: 2.4rem;
-      background: linear-gradient(90deg, #4d6a4a, #8a6c3f, #a0522d);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      color: #5c4a2e;
       letter-spacing: -0.02em;
       margin-bottom: 4px;
     }
     
     .well {
       background: #fffdf9;
-      border: 1px solid #e8e1d2;
+      border: 1px solid #e3dcc6;
       border-radius: 16px;
       box-shadow: 0 1px 2px rgba(74,58,30,0.04), 0 8px 24px -8px rgba(74,58,30,0.10);
       padding: 24px 26px;
@@ -171,19 +172,19 @@ ui <- fluidPage(
     
     .form-control, select.form-control {
       font-size: 17px;
-      border-radius: 10px;
-      border: 1.5px solid #e3dcc9;
+      border-radius: 6px;
+      border: 1.5px solid #c9b385;
       padding: 10px 13px;
       transition: border-color 0.15s ease, box-shadow 0.15s ease;
-      background-color: #fffefb;
+      background-color: #fffdf7;
     }
     .form-control:focus, select.form-control:focus {
-      border-color: #5c7a52;
-      box-shadow: 0 0 0 4px rgba(92,122,82,0.14);
+      border-color: #4a7c9e;
+      box-shadow: 0 0 0 4px rgba(74,124,158,0.18);
       background-color: #ffffff;
     }
     
-    p, .help-block, .shiny-input-container small { font-size: 16px; color: #6b6354; }
+    p, .help-block, .shiny-input-container small { font-size: 16px; color: #5c5540; }
     
     .section-title {
       font-weight: 700;
@@ -201,7 +202,7 @@ ui <- fluidPage(
       left: 2px; bottom: 0;
       width: 42px; height: 4px;
       border-radius: 4px;
-      background: linear-gradient(90deg, #4d6a4a, #a0522d);
+      background: linear-gradient(90deg, #4d6a4a, #8a6c3f);
     }
     
     .derived-box {
@@ -220,7 +221,7 @@ ui <- fluidPage(
       max-height: 480px; overflow-y: auto;
     }
     
-    .page-nav { margin: 22px 0; }
+    .page-nav { margin: 22px 0; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     
     .btn {
       font-size: 16px;
@@ -233,7 +234,7 @@ ui <- fluidPage(
       color: #ffffff;
       box-shadow: 0 2px 6px rgba(43,38,32,0.12);
     }
-    .btn:hover { transform: translateY(-1px); filter: brightness(1.04); }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
     .btn:active { transform: translateY(0); }
     
     .btn.btn-primary,
@@ -253,7 +254,8 @@ ui <- fluidPage(
       box-shadow: 0 6px 18px -4px rgba(63,92,56,0.65);
     }
     
-    #run_pipeline_btn span, #run_pipeline_btn * {
+    #run_pipeline_btn span, #run_pipeline_btn *,
+    #publish_btn span, #publish_btn * {
       background: transparent !important;
       box-shadow: none !important;
     }
@@ -270,7 +272,22 @@ ui <- fluidPage(
       border-color: #c9b98a !important;
     }
     
-    #run_pipeline_btn.btn-primary {
+    /* Plain action buttons (no btn-primary/btn-default class, e.g. the Back
+       buttons) get their own slightly different neutral tone so they read as
+       secondary without competing with the sage-green primary buttons. */
+    .btn:not(.btn-primary):not(.btn-default) {
+      background-color: #e4e8dd !important;
+      color: #3d4a37 !important;
+      border-color: #c7d0bb !important;
+    }
+    .btn:not(.btn-primary):not(.btn-default):hover,
+    .btn:not(.btn-primary):not(.btn-default):focus {
+      background-color: #d7ddc9 !important;
+      color: #2e3a29 !important;
+      border-color: #b4c0a4 !important;
+    }
+    
+    #run_pipeline_btn.btn-primary, #publish_btn.btn-primary {
       background: linear-gradient(135deg, #5c7a52, #3f5c38) !important;
       color: #ffffff !important;
       box-shadow: 0 4px 14px -4px rgba(63,92,56,0.55) !important;
@@ -282,8 +299,43 @@ ui <- fluidPage(
       border-radius: 12px !important;
     }
     
-    /* Checkboxes get a little visual lift */
     .checkbox label, .shiny-input-container .checkbox { font-weight: 500; }
+    
+    .step-indicator {
+      display: flex; gap: 8px; align-items: center; margin-bottom: 18px; flex-wrap: wrap;
+    }
+    .step-pill {
+      padding: 6px 14px; border-radius: 999px; font-size: 14.5px; font-weight: 700;
+      background: #efe7d4; color: #8a7f5c; border: 1.5px solid #e3dcc9;
+    }
+    .step-pill.active {
+      background: linear-gradient(135deg, #5c7a52, #3f5c38); color: #fff; border-color: #3f5c38;
+    }
+    .step-pill.done {
+      background: #eef2ea; color: #4d6a4a; border-color: #cfe0ca;
+    }
+    
+    .btn:disabled, .btn.disabled {
+      opacity: 0.45 !important;
+      cursor: not-allowed !important;
+      filter: grayscale(0.3);
+      transform: none !important;
+      box-shadow: none !important;
+    }
+    .btn:disabled:hover, .btn.disabled:hover {
+      transform: none !important;
+      filter: grayscale(0.3) !important;
+    }
+    
+    .btn-queued {
+      background: linear-gradient(135deg, #6a9c52, #4d7a3a) !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 0 4px rgba(106,156,82,0.3) !important;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+    .btn-queued::after {
+      content: ' ✓';
+    }
     
     ::-webkit-scrollbar { width: 10px; height: 10px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -295,10 +347,10 @@ ui <- fluidPage(
       div(class = "title-panel-custom", "Metadata Dashboard")
   ),
   
-  # ---------------- PAGE 1 ----------------
+  # ---------------- PAGE 1: Task picker ----------------
   conditionalPanel(
     condition = "output.current_page == 1",
-    p("Step 1 of 2 — choose your workflow."),
+    p("Step 1 — choose your workflow."),
     fluidRow(
       column(6,
              wellPanel(
@@ -309,10 +361,10 @@ ui <- fluidPage(
                                        "3. Create Metadata" = "metadata",
                                        "Rebuild Workbook (Advanced)" = "reboot")),
                
-               tags$ul(style = "font-size:14.5px; color:#444; padding-left:18px;",
+               tags$ul(style = "font-size:16px; color:#444; padding-left:18px;",
                        tags$li(tags$strong("1. Build Workbook"), " – Start here. Builds the Excel metadata form from your CSVs."),
                        tags$li(tags$strong("2. Edit Workbook"), " – Add, rename, reclass, or delete attributes after the workbook exists."),
-                       tags$li(tags$strong("3. Create Metadata"), " – Final step. Turns the filled-in Excel form into the EML file."),
+                       tags$li(tags$strong("3. Create Metadata"), " – Final step. Turns the filled-in Excel form into the EML file, runs checks, and publishes."),
                        tags$li(tags$strong("Rebuild Workbook (Advanced)"), " – Rebuilds the Excel workbook from existing txt files.")
                ),
                
@@ -336,10 +388,20 @@ ui <- fluidPage(
     )
   ),
   
-  # ---------------- PAGE 2 ----------------
+  # ---------------- PAGE 2: Fields + Run (build workbook / fix / reboot / create metadata) ----------------
   conditionalPanel(
     condition = "output.current_page == 2",
-    p("Step 2 of 2 — fields shown below depend on the task you picked (currently: ",
+    
+    conditionalPanel(
+      condition = "input.task == 'metadata'",
+      div(class = "step-indicator",
+          tags$span(class = "step-pill active", "① Create Metadata"),
+          tags$span(class = "step-pill", "② Run Checks"),
+          tags$span(class = "step-pill", "③ Publish")
+      )
+    ),
+    
+    p("Step 2 — fields shown below depend on the task you picked (currently: ",
       tags$strong(textOutput("current_task_label", inline = TRUE)), ")."),
     uiOutput("scan_status_box"),
     
@@ -355,7 +417,7 @@ ui <- fluidPage(
       )
     ),
     
-    # ---- task == "metadata": Data Info + Date Info ----
+    # ---- task == "metadata": Data Info + Taxonomy/Geo + Date Info ----
     conditionalPanel(
       condition = "input.task == 'metadata'",
       fluidRow(
@@ -409,77 +471,10 @@ ui <- fluidPage(
                  uiOutput("date_range_output")
                )
         )
-      ),
-      fluidRow(
-        column(12,
-               wellPanel(
-                 style = "border: 2px solid #e8a33d;",
-                 div(class = "section-title", style = "color:#b5651d; border-bottom-color:#e8a33d;", "⚠️ Publishing"),
-                 div(style = "background:#fff6e5; border:1px solid #f0c674; border-radius:6px; padding:14px 16px; margin-bottom:14px;",
-                     tags$p(style = "color:#8a5a00; font-size:15.5px; font-weight:600; margin-bottom:6px;",
-                            "⚠️ This is the final, publishing step."),
-                     tags$p(style = "color:#7a5200; font-size:14.5px; margin-bottom:0;",
-                            "Checking \"Ready to Publish\" sets a permanent DataStore DOI/project on this metadata, and — ",
-                            "if you also check \"upload the data package\" — uploads your data files to DataStore. ",
-                            "Once published, this is not something you can casually undo. Only do this once the metadata ",
-                            "is fully finalized and reviewed/approved.")
-                 ),
-                 checkboxInput("ready_to_publish", "Ready to Publish", value = FALSE),
-                 conditionalPanel(
-                   condition = "input.ready_to_publish == true",
-                   div(style = "background:#fdecea; border:1px solid #f1a9a0; border-radius:6px; padding:12px 16px; margin:10px 0 14px 0;",
-                       checkboxInput("confirm_publish", 
-                                     tags$span(style="color:#a12a1a; font-weight:600;",
-                                               "I understand this will finalize and publish this data package, and that this cannot be easily undone."),
-                                     value = FALSE)
-                   ),
-                   conditionalPanel(
-                     condition = "input.confirm_publish == true",
-                     textInput("datastore_doi", "datastore_doi", value = ""),
-                     textInput("doi", "doi", value = ""),
-                     textInput("project", "project (DataStore Reference ID)", value = ""),
-                     tags$hr(),
-                     checkboxInput("upload_data_package", 
-                                   tags$span(style = "font-weight:700;", "Also upload the data package to DataStore"), 
-                                   value = FALSE),
-                     helpText("Unchecked: the DOI/project are set, but nothing is uploaded. ",
-                              "Checked: the data package files are uploaded as well.")
-                   ),
-                   conditionalPanel(
-                     condition = "input.confirm_publish == false",
-                     tags$p(style = "color:#a12a1a; font-size:14px; font-style:italic;",
-                            "Check the confirmation box above to reveal publishing fields.")
-                   )
-                 )
-               )
-        )
-      ),
-      fluidRow(
-        column(12,
-               wellPanel(
-                 div(class = "section-title", "Run Checks"),
-                 p(style = "color:#555; font-size:15px;",
-                   "Optional, independent of Run. Requires that 10_EML_creation.R has ",
-                   "already been run at least once so metadata_id_metadata.xml exists."),
-                 p(style = "color:#777; font-size:14px;",
-                   "If something looks off here, check the Excel workbook's attributes tab first — ",
-                   "most issues come from incomplete attribute or missing-value info."),
-                 fluidRow(
-                   column(6, actionButton("run_eml_validate_btn", "🔎 Run EML Validate", width = "100%")),
-                   column(6, actionButton("run_dpchecker_btn", "🔎 Run DPchecker Congruence Checks", width = "100%"))
-                 ),
-                 br(),
-                 tags$pre(id = "checks_log_box",
-                          style = "background:#fdfdfd; color:#1a1a1a; border:1px solid #d5d8dc; padding:12px; border-radius:6px; font-size:15px; font-family: Consolas, 'Courier New', monospace; line-height:1.45; max-height:420px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;",
-                          "")
-               )
-        )
       )
     ),
     
-    # ---- task == "workbook": Taxonomy / Geospatial Info. (metadata's
-    # equivalent copy lives above, ordered before Date Info, with its own
-    # wrapper IDs since both tasks share the same underlying input IDs.) ----
+    # ---- task == "workbook": Taxonomy / Geospatial Info ----
     conditionalPanel(
       condition = "input.task == 'workbook'",
       fluidRow(
@@ -522,6 +517,7 @@ ui <- fluidPage(
                )
         )
       ),
+      
       fluidRow(
         column(6,
                wellPanel(
@@ -547,6 +543,7 @@ ui <- fluidPage(
                )
         )
       ),
+      
       fluidRow(
         column(6,
                wellPanel(
@@ -581,19 +578,33 @@ ui <- fluidPage(
                           "")
                )
         )
+      ),
+      
+      fluidRow(
+        column(12,
+               wellPanel(
+                 div(class = "section-title", "🔀 Reorder Attributes"),
+                 p(style = "color:#777; font-size:16px;",
+                   "Matches an attribute table's row order to its CSV's column order. ",
+                   "Applies immediately to the attributes file on disk."),
+                 selectInput("reorder_table", "Table", choices = character(0)),
+                 fluidRow(
+                   column(6, actionButton("reorder_match_csv", "📐 Match CSV column order", width = "100%", class = "btn-primary")),
+                   column(6, actionButton("reorder_apply_fixes_btn", "✅ Apply Fixes (if anything's queued)", width = "100%"))
+                 ),
+                 uiOutput("reorder_apply_fixes_hint"),
+                 br(),
+                 uiOutput("reorder_list_box"),
+                 br(),
+                 tags$pre(id = "reorder_fix_log_box",
+                          style = "background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:6px; font-size:14px; max-height:220px; overflow-y:auto; white-space:pre-wrap; display:none;",
+                          "")
+               )
+        )
       )
     ),
     
-    div(class = "page-nav",
-        actionButton("to_page1", "← Back", width = "160px"),
-        conditionalPanel(
-          condition = "input.task == 'workbook' || input.task == 'metadata'",
-          style = "margin-top: 12px;",
-          actionButton("rescan_btn", "🔄 Re-scan folder", width = "200px")
-        )
-    ),
-    
-    # ---- task == "reboot": nothing extra needed beyond File Name & Title ----
+    # ---- task == "reboot" ----
     conditionalPanel(
       condition = "input.task == 'reboot'",
       fluidRow(
@@ -608,6 +619,15 @@ ui <- fluidPage(
       )
     ),
     
+    div(class = "page-nav",
+        actionButton("to_page1", "← Back", width = "160px"),
+        conditionalPanel(
+          condition = "input.task == 'workbook' || input.task == 'metadata'",
+          actionButton("rescan_btn", "🔄 Re-scan folder", width = "200px")
+        )
+    ),
+    
+    # ---- Run section: shown for workbook / metadata / reboot (not fix, which has its own Apply Fixes) ----
     conditionalPanel(
       condition = "input.task != 'fix'",
       fluidRow(
@@ -625,11 +645,14 @@ ui <- fluidPage(
                    condition = "input.task == 'metadata'",
                    p(style = "color:#555; font-size:17px;",
                      "Create the metadata package (EML file) from your filled-in Excel workbook. ",
-                     "This needs to be run at least once before you can use Run Checks above — ",
-                     "EML Validate and DPchecker both require the metadata file to already exist.")
+                     "Once this finishes, continue to Run Checks on the next page.")
+                 ),
+                 conditionalPanel(
+                   condition = "input.task == 'reboot'",
+                   p(style = "color:#555; font-size:17px;",
+                     "Rebuilds the Excel workbook from existing txt files.")
                  ),
                  actionButton("run_pipeline_btn", "▶ Run", class = "btn-primary", width = "260px"),
-                 uiOutput("publish_run_warning"),
                  br(), br(),
                  tags$div(id = "pipeline_steps_box", class = "derived-box", "No run yet."),
                  br(),
@@ -643,6 +666,169 @@ ui <- fluidPage(
       )
     ),
     
+    # ---- Next-step nav for metadata only ----
+    conditionalPanel(
+      condition = "input.task == 'metadata'",
+      div(class = "page-nav",
+          actionButton("to_page3", "Next: Run Checks →", class = "btn-primary", width = "260px")
+      )
+    ),
+    
+    # ---- Save/Load/Export: shown here for non-metadata tasks only (metadata's copy is on page 4) ----
+    conditionalPanel(
+      condition = "input.task != 'metadata'",
+      fluidRow(
+        column(12,
+               wellPanel(
+                 div(class = "section-title", "Save / Load / Export"),
+                 p(style = "color:#555; font-size:17px; font-style:italic;",
+                   "Tired of filling in fields over and over again? Save your settings here!"),
+                 fluidRow(
+                   column(3, actionButton("save_btn", "💾 Save answers to JSON", width = "100%", class = "btn-primary")),
+                   column(3, actionButton("load_btn", "📂 Reload saved JSON", width = "100%")),
+                   column(3, actionButton("reset_btn", "↺ Reset to defaults", width = "100%")),
+                   column(3, downloadButton("download_json", "⬇ Download JSON", style = "width:100%"))
+                 ),
+                 br(),
+                 verbatimTextOutput("status_msg")
+               )
+        )
+      )
+    ),
+    
+    div(style = "text-align:center; padding: 18px 0 6px 0; color:#a39a7f; font-size:14px;",
+        "Dashboard made by Katie Herrmann"
+    )
+  ),
+  
+  # ---------------- PAGE 3 (metadata only): Run Checks ----------------
+  conditionalPanel(
+    condition = "output.current_page == 3",
+    
+    div(class = "step-indicator",
+        tags$span(class = "step-pill done", "① Create Metadata"),
+        tags$span(class = "step-pill active", "② Run Checks"),
+        tags$span(class = "step-pill", "③ Publish")
+    ),
+    
+    p("Step 3 — run checks on your newly created metadata before moving on to publishing."),
+    
+    fluidRow(
+      column(12,
+             wellPanel(
+               div(class = "section-title", "Run Checks"),
+               p(style = "color:#555; font-size:17px;",
+                 "Requires that the metadata package was already created on the previous page ",
+                 "(metadata_id_metadata.xml must exist)."),
+               p(style = "color:#777; font-size:16px;",
+                 "If something looks off here, check the Excel workbook's attributes tab first — ",
+                 "most issues come from incomplete attribute or missing-value info."),
+               fluidRow(
+                 column(6, actionButton("run_eml_validate_btn", "🔎 Run EML Validate", width = "100%")),
+                 column(6, actionButton("run_dpchecker_btn", "🔎 Run DPchecker Congruence Checks", width = "100%"))
+               ),
+               br(),
+               tags$pre(id = "checks_log_box",
+                        style = "background:#fdfdfd; color:#1a1a1a; border:1px solid #d5d8dc; padding:12px; border-radius:6px; font-size:15px; font-family: Consolas, 'Courier New', monospace; line-height:1.45; max-height:420px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;",
+                        "")
+             )
+      )
+    ),
+    
+    div(class = "page-nav",
+        actionButton("to_page2_from3", "← Back", width = "160px"),
+        uiOutput("to_page4_btn_ui")
+    ),
+    
+    div(style = "text-align:center; padding: 18px 0 6px 0; color:#a39a7f; font-size:14px;",
+        "Dashboard made by Katie Herrmann"
+    )
+  ),
+  
+  # ---------------- PAGE 4 (metadata only): Publishing ----------------
+  conditionalPanel(
+    condition = "output.current_page == 4",
+    
+    div(class = "step-indicator",
+        tags$span(class = "step-pill done", "① Create Metadata"),
+        tags$span(class = "step-pill done", "② Run Checks"),
+        tags$span(class = "step-pill active", "③ Publish")
+    ),
+    
+    p("Step 4 — final review before publishing."),
+    
+    fluidRow(
+      column(12,
+             wellPanel(
+               style = "border: 2px solid #e8a33d;",
+               div(class = "section-title", style = "color:#b5651d; border-bottom-color:#e8a33d;", "⚠️ Publishing"),
+               div(style = "background:#fff6e5; border:1px solid #f0c674; border-radius:6px; padding:14px 16px; margin-bottom:14px;",
+                   tags$p(style = "color:#8a5a00; font-size:17.5px; font-weight:600; margin-bottom:6px;",
+                          "⚠️ This is the final, publishing step."),
+                   tags$p(style = "color:#7a5200; font-size:16.5px; margin-bottom:0;",
+                          "Checking \"Ready to Publish\" sets a permanent DataStore DOI/project on this metadata, and — ",
+                          "if you also check \"upload the data package\" — uploads your data files to DataStore. ",
+                          "Once published, this is not something you can casually undo. Only do this once the metadata ",
+                          "is fully finalized, checked, and reviewed/approved.")
+               ),
+               checkboxInput("ready_to_publish", "Ready to Publish", value = FALSE),
+               conditionalPanel(
+                 condition = "input.ready_to_publish == true",
+                 div(style = "background:#fdecea; border:1px solid #f1a9a0; border-radius:6px; padding:12px 16px; margin:10px 0 14px 0;",
+                     checkboxInput("confirm_publish", 
+                                   tags$span(style="color:#a12a1a; font-weight:600;",
+                                             "I understand this will finalize and publish this data package, and that this cannot be easily undone."),
+                                   value = FALSE)
+                 ),
+                 conditionalPanel(
+                   condition = "input.confirm_publish == true",
+                   radioButtons("doi_mode", "DOI",
+                                choices = c("Create a new DOI (auto-generates a DataStore draft reference)" = "new",
+                                            "I already have a DataStore reference code" = "existing"),
+                                selected = "new"),
+                   conditionalPanel(
+                     condition = "input.doi_mode == 'existing'",
+                     textInput("ds_ref_code", "DataStore reference code (7 digits)", value = ""),
+                     helpText("Enter ONLY the 7-digit reference code from the draft reference you already created on DataStore \u2014 not the full URL or DOI.")
+                   ),
+                   textInput("project", "project (DataStore Reference ID)", value = ""),
+                   tags$hr(),
+                   checkboxInput("upload_data_package", 
+                                 tags$span(style = "font-weight:700;", "Also upload the data package to DataStore"), 
+                                 value = FALSE),
+                   helpText("Unchecked: the DOI/project are set, but nothing is uploaded. ",
+                            "Checked: the data package files are uploaded as well.")
+                 ),
+                 conditionalPanel(
+                   condition = "input.confirm_publish == false",
+                   tags$p(style = "color:#a12a1a; font-size:16px; font-style:italic;",
+                          "Check the confirmation box above to reveal publishing fields.")
+                 )
+               )
+             )
+      )
+    ),
+    
+    fluidRow(
+      column(12,
+             wellPanel(
+               div(class = "section-title", "Publish"),
+               p(style = "color:#555; font-size:17px;",
+                 "Applies your DataStore DOI/project (and uploads the data package, if checked) to the ",
+                 "metadata package already created. This does not regenerate the EML file."),
+               actionButton("publish_btn", "▶ Run", class = "btn-primary", width = "260px"),
+               uiOutput("publish_run_warning"),
+               br(), br(),
+               tags$pre(id = "publish_log_box",
+                        style = "background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:6px; font-size:14px; max-height:300px; overflow-y:auto; white-space:pre-wrap;",
+                        ""),
+               br(),
+               uiOutput("resulting_doi_box"),
+               tags$div(id = "publish_done_banner", style = "display:none;")
+             )
+      )
+    ),
+    
     fluidRow(
       column(12,
              wellPanel(
@@ -650,15 +836,19 @@ ui <- fluidPage(
                p(style = "color:#555; font-size:17px; font-style:italic;",
                  "Tired of filling in fields over and over again? Save your settings here!"),
                fluidRow(
-                 column(3, actionButton("save_btn", "💾 Save answers to JSON", width = "100%", class = "btn-primary")),
-                 column(3, actionButton("load_btn", "📂 Reload saved JSON", width = "100%")),
-                 column(3, actionButton("reset_btn", "↺ Reset to defaults", width = "100%")),
-                 column(3, downloadButton("download_json", "⬇ Download JSON", style = "width:100%"))
+                 column(3, actionButton("save_btn_p4", "💾 Save answers to JSON", width = "100%", class = "btn-primary")),
+                 column(3, actionButton("load_btn_p4", "📂 Reload saved JSON", width = "100%")),
+                 column(3, actionButton("reset_btn_p4", "↺ Reset to defaults", width = "100%")),
+                 column(3, downloadButton("download_json_p4", "⬇ Download JSON", style = "width:100%"))
                ),
                br(),
-               verbatimTextOutput("status_msg")
+               verbatimTextOutput("status_msg_p4")
              )
       )
+    ),
+    
+    div(class = "page-nav",
+        actionButton("to_page3_from4", "← Back", width = "160px")
     ),
     
     div(style = "text-align:center; padding: 18px 0 6px 0; color:#a39a7f; font-size:14px;",
@@ -676,26 +866,26 @@ server <- function(input, output, session) {
   status <- reactiveVal("")
   page <- reactiveVal(1)
   scan_status <- reactiveVal("")
+  checks_run_at_least_once <- reactiveVal(FALSE)
   
   output$current_page <- reactive({ page() })
   outputOptions(output, "current_page", suspendWhenHidden = FALSE)
   
   output$current_task_label <- renderText(TASK_LABELS[[input$task]])
   
-  # ---- Flip the Run button to a red "Publish" state once the user has
-  # checked Ready to Publish AND the explicit confirmation checkbox. This is
-  # purely visual/label — the actual publish logic is still gated by
-  # ready_to_publish + confirm_publish being read in build_config()/the
-  # pipeline runner, same as before. ----
+  # Publish button starts disabled every session, until both publish
+  # checkboxes are checked (see the observe() below).
+  shinyjs::disable("publish_btn")
+  
+  # ---- Flip the Publish button to a red/rust "armed" state once the user
+  # has checked Ready to Publish AND the explicit confirmation checkbox. ----
   observe({
-    armed <- isTRUE(input$task == "metadata") &&
-      isTRUE(input$ready_to_publish) &&
-      isTRUE(input$confirm_publish)
+    armed <- isTRUE(input$ready_to_publish) && isTRUE(input$confirm_publish)
     if (armed) {
-      updateActionButton(session, "run_pipeline_btn", label = "🚀 Publish")
+      shinyjs::enable("publish_btn")
       shinyjs::runjs("
         setTimeout(function() {
-          var btn = document.getElementById('run_pipeline_btn');
+          var btn = document.getElementById('publish_btn');
           if (btn) {
             btn.style.setProperty('background', 'linear-gradient(135deg, #b5533d, #8c3f2d)', 'important');
             btn.style.setProperty('box-shadow', '0 4px 14px -4px rgba(140,63,45,0.6)', 'important');
@@ -711,10 +901,10 @@ server <- function(input, output, session) {
         }, 50);
       ")
     } else {
-      updateActionButton(session, "run_pipeline_btn", label = "▶ Run")
+      shinyjs::disable("publish_btn")
       shinyjs::runjs("
         setTimeout(function() {
-          var btn = document.getElementById('run_pipeline_btn');
+          var btn = document.getElementById('publish_btn');
           if (btn) {
             btn.style.removeProperty('background');
             btn.style.removeProperty('box-shadow');
@@ -727,19 +917,24 @@ server <- function(input, output, session) {
   })
   
   output$publish_run_warning <- renderUI({
-    armed <- isTRUE(input$task == "metadata") &&
-      isTRUE(input$ready_to_publish) &&
-      isTRUE(input$confirm_publish)
+    armed <- isTRUE(input$ready_to_publish) && isTRUE(input$confirm_publish)
     if (armed) {
       tags$p(style = "color:#c0392b; font-size:16px; font-weight:600; margin-top:8px;",
-             "🚀 Clicking Publish will finalize and publish this data package.")
+             "🚀 Clicking Run will finalize and publish this data package.")
+    }
+  })
+  
+  output$resulting_doi_box <- renderUI({
+    saved_cfg <- cfg()
+    if (!is.null(saved_cfg$doi) && nzchar(saved_cfg$doi)) {
+      tags$div(class = "derived-box", style = "margin-bottom:10px;",
+               sprintf("Current DOI on record: %s", saved_cfg$doi))
+    } else {
+      NULL
     }
   })
   
   # ---- Push a config list into all the UI inputs ----
-  # keep_task = FALSE only on initial app load (use the loaded config's task).
-  # On manual Reset, we deliberately leave the current task selection alone —
-  # clearing fields shouldn't yank the user out of whatever step they're on.
   apply_config_to_inputs <- function(c0, keep_task = TRUE) {
     if (!keep_task) {
       updateSelectInput(session, "task", selected = c0$task)
@@ -756,12 +951,11 @@ server <- function(input, output, session) {
     updateTextInput(session, "language", value = c0$language)
     updateCheckboxInput(session, "ready_to_publish", value = isTRUE(c0$ready_to_publish))
     updateCheckboxInput(session, "upload_data_package", value = isTRUE(c0$upload_data_package))
-    updateTextInput(session, "datastore_doi", value = c0$datastore_doi)
-    updateTextInput(session, "doi", value = c0$doi)
+    updateRadioButtons(session, "doi_mode", selected = if (!is.null(c0$doi_mode)) c0$doi_mode else "new")
+    updateTextInput(session, "ds_ref_code", value = c0$ds_ref_code)
     updateTextInput(session, "project", value = c0$project)
   }
   
-  # ---- Initialize UI from loaded config on startup ----
   observe({
     apply_config_to_inputs(isolate(cfg()), keep_task = FALSE)
   })
@@ -776,10 +970,25 @@ server <- function(input, output, session) {
   observeEvent(input$to_page1, { page(1) })
   observeEvent(input$rescan_btn, { do_scan(preserve_selection = TRUE) })
   
+  observeEvent(input$to_page3, { page(3) })
+  observeEvent(input$to_page2_from3, { page(2) })
+  observeEvent(input$to_page4, { page(4) })
+  observeEvent(input$to_page3_from4, { page(3) })
+  
+  output$to_page4_btn_ui <- renderUI({
+    if (isTRUE(checks_run_at_least_once())) {
+      actionButton("to_page4", "Next: Publishing →", class = "btn-primary", width = "260px")
+    } else {
+      tags$div(
+        style = "margin-top: 6px;",
+        tags$p(style = "color:#8a5a00; font-size:16px; font-style:italic;",
+               "Run at least one check above (EML Validate or DPchecker) to continue.")
+      )
+    }
+  })
+  
   # ---- Hide Taxonomy & Geospatial sections when their corresponding toggle
-  # (tax_data / geo_data) is unchecked. The underlying inputs stay in the
-  # DOM (just hidden via CSS), so any values already entered are preserved
-  # and reappear if the section is shown again later.
+  # (tax_data / geo_data) is unchecked. ----
   observe({
     if (isTRUE(input$tax_data)) {
       shinyjs::show(id = "taxonomy_section")
@@ -840,10 +1049,6 @@ server <- function(input, output, session) {
     scan_status(sprintf("✅ Found %d CSV file(s) in '%s'.", length(files), wf))
   }
   
-  # ---- Helper: read just the header row of a CSV, robustly ----
-  # Uses readr::read_csv with n_max = 0 so it parses zero data rows but still
-  # gets correct quoting, embedded-comma handling, and BOM handling —
-  # matching how the real pipeline will read the file later.
   get_csv_headers <- function(filename) {
     if (is.null(filename) || filename == "") return(character(0))
     f <- file.path(working_folder, filename)
@@ -857,7 +1062,6 @@ server <- function(input, output, session) {
     headers
   }
   
-  # ---- Populate column dropdowns whenever the source file changes ----
   observeEvent(input$data_taxa_tables, {
     c0 <- isolate(cfg())
     cols <- get_csv_headers(input$data_taxa_tables)
@@ -893,7 +1097,6 @@ server <- function(input, output, session) {
     )
   })
   
-  # ---- Word count warning for title ----
   output$title_word_warning <- renderUI({
     n <- length(strsplit(trimws(input$package_title), "\\s+")[[1]])
     if (input$package_title == "") return(NULL)
@@ -904,7 +1107,6 @@ server <- function(input, output, session) {
     }
   })
   
-  # ---- Calculate start/end dates from selected file ----
   observeEvent(input$calc_dates, {
     wf <- working_folder
     f <- file.path(wf, input$data_dates_table)
@@ -933,7 +1135,9 @@ server <- function(input, output, session) {
   ATTR_COLS <- c("attributeName", "attributeDefinition", "class", "unit",
                  "dateTimeFormatString", "missingValueCode", "missingValueCodeExplanation")
   
-  fix_queue  <- reactiveVal(list())         # list of pending edit operations
+  fix_queue  <- reactiveVal(list())
+  reorder_warning <- reactiveVal(NULL)        # character vector of unmatched attribute names, or NULL
+  reorder_missing_attrs <- reactiveVal(NULL)  # character vector of CSV columns with no attribute row, or NULL
   
   attr_file_for   <- function(tbl) file.path(working_folder, paste0("attributes_", tbl, ".txt"))
   catvars_file_for <- function(tbl) file.path(working_folder, paste0("catvars_", tbl, ".txt"))
@@ -964,7 +1168,6 @@ server <- function(input, output, session) {
     write.table(df, catvars_file_for(tbl), sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE, na = "")
   }
   
-  # ---- Refresh the list of available tables (from attributes_*.txt present in working_folder) ----
   refresh_fix_tables <- function() {
     files <- list.files(working_folder, pattern = "^attributes_.*\\.txt$", full.names = FALSE)
     tbls <- sub("^attributes_", "", sub("\\.txt$", "", files))
@@ -972,9 +1175,9 @@ server <- function(input, output, session) {
     updateSelectInput(session, "rename_table", choices = tbls)
     updateSelectInput(session, "reclass_table", choices = tbls)
     updateSelectInput(session, "delete_table", choices = tbls)
+    updateSelectInput(session, "reorder_table", choices = tbls)
   }
   
-  # ---- Update attribute-name dropdowns whenever their table selection changes ----
   observeEvent(input$rename_table, {
     df <- read_attr_file(input$rename_table)
     updateSelectInput(session, "rename_old_name", choices = if (!is.null(df)) df$attributeName else character(0))
@@ -990,7 +1193,198 @@ server <- function(input, output, session) {
     updateSelectInput(session, "delete_name", choices = if (!is.null(df)) df$attributeName else character(0))
   }, ignoreInit = FALSE)
   
-  # ---- "Sync from Excel" button: runs 09_excel_to_txt.R, then refreshes tables ----
+  # ==========================================================================
+  # ---- Reorder Attributes: applies immediately, no queue needed ----
+  # ==========================================================================
+  csv_path_for_table <- function(tbl) {
+    candidate <- file.path(working_folder, paste0(tbl, ".csv"))
+    if (file.exists(candidate)) candidate else NA
+  }
+  
+  get_csv_header_order <- function(tbl) {
+    p <- csv_path_for_table(tbl)
+    if (is.na(p)) return(character(0))
+    tryCatch(
+      trimws(names(suppressMessages(suppressWarnings(
+        readr::read_csv(p, n_max = 0, show_col_types = FALSE, progress = FALSE)
+      )))),
+      error = function(e) character(0)
+    )
+  }
+  
+  render_reorder_list <- function(tbl) {
+    df <- read_attr_file(tbl)
+    if (is.null(df) || nrow(df) == 0) {
+      return(tags$p(style = "color:#888; font-size:16px;", "No attributes found for this table."))
+    }
+    n <- nrow(df)
+    rows <- lapply(seq_len(n), function(i) {
+      is_first <- i == 1
+      is_last  <- i == n
+      tags$div(
+        class = "reorder-row",
+        style = sprintf(
+          "display:flex; align-items:center; gap:12px; padding:9px 12px; border-bottom:1px solid #eee2cc; %s",
+          if (i %% 2 == 0) "background:#fbf8f0;" else "background:transparent;"
+        ),
+        tags$span(
+          style = "font-family:'SF Mono',Consolas,monospace; font-size:13px; font-weight:700; color:#a39a7f; width:22px; text-align:right; flex-shrink:0;",
+          i
+        ),
+        tags$span(
+          style = "flex:1; font-size:16px; color:#2b2620; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
+          df$attributeName[i]
+        ),
+        tags$div(
+          style = "display:flex; gap:2px; flex-shrink:0;",
+          tags$button(
+            id = paste0("reorder_up_", i), class = "reorder-btn", type = "button",
+            disabled = if (is_first) "disabled" else NULL,
+            title = "Move up",
+            HTML("&#9650;")
+          ),
+          tags$button(
+            id = paste0("reorder_down_", i), class = "reorder-btn", type = "button",
+            disabled = if (is_last) "disabled" else NULL,
+            title = "Move down",
+            HTML("&#9660;")
+          )
+        )
+      )
+    })
+    
+    tagList(
+      tags$style(HTML("
+        .reorder-btn {
+          width: 26px; height: 26px;
+          border-radius: 6px;
+          border: 1px solid #e3dcc9;
+          background: #fffefb;
+          color: #6a6350;
+          font-size: 10px;
+          line-height: 1;
+          cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+          padding: 0;
+        }
+        .reorder-btn:hover:not(:disabled) {
+          background: #5c7a52;
+          border-color: #3f5c38;
+          color: #ffffff;
+        }
+        .reorder-btn:disabled {
+          opacity: 0.3;
+          cursor: not-allowed;
+        }
+        .reorder-row:hover {
+          background: #f3ead9 !important;
+        }
+      ")),
+      tags$div(
+        style = "border:1px solid #eee2cc; border-radius:10px; overflow:hidden;",
+        do.call(tagList, rows)
+      )
+    )
+  }
+  
+  output$reorder_list_box <- renderUI({
+    w <- reorder_warning()
+    m <- reorder_missing_attrs()
+    
+    missing_ui <- if (!is.null(m) && length(m) > 0) {
+      tags$div(
+        style = "background:#fdecea; border:1px solid #f1a9a0; border-radius:8px; padding:10px 14px; margin-bottom:10px; font-size:15.5px; color:#a12a1a;",
+        tags$strong("🚫 CSV columns with no attribute defined at all: "),
+        paste(m, collapse = ", "),
+        tags$br(),
+        tags$span(style = "font-size:14.5px; font-weight:400;",
+                  "These won't appear in this list until you add an attribute row for them (see Add Attribute).")
+      )
+    } else {
+      NULL
+    }
+    
+    warning_ui <- if (!is.null(w) && length(w) > 0) {
+      tags$div(
+        style = "background:#fff6e5; border:1px solid #f0c674; border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:15.5px; color:#8a5a00;",
+        tags$strong("⚠️ Not found in CSV header (left at the end): "),
+        paste(w, collapse = ", ")
+      )
+    } else {
+      NULL
+    }
+    tagList(missing_ui, warning_ui, render_reorder_list(input$reorder_table))
+  })
+  
+  observeEvent(input$reorder_table, {
+    reorder_warning(NULL)
+    reorder_missing_attrs(NULL)
+  })
+  
+  move_attr_row <- function(tbl, from_idx, to_idx) {
+    df <- read_attr_file(tbl)
+    if (is.null(df) || from_idx < 1 || to_idx < 1 || from_idx > nrow(df) || to_idx > nrow(df)) return(invisible())
+    ord <- seq_len(nrow(df))
+    ord <- ord[ord != from_idx]
+    ord <- append(ord, from_idx, after = to_idx - 1)
+    df <- df[ord, , drop = FALSE]
+    write_attr_file(tbl, df)
+  }
+  
+  observe({
+    tbl <- input$reorder_table
+    req(tbl)
+    df <- read_attr_file(tbl)
+    n <- if (is.null(df)) 0 else nrow(df)
+    if (n == 0) return(invisible())
+    lapply(seq_len(n), function(i) {
+      local({
+        idx <- i
+        observeEvent(input[[paste0("reorder_up_", idx)]], {
+          move_attr_row(input$reorder_table, idx, idx - 1)
+        }, ignoreInit = TRUE)
+        observeEvent(input[[paste0("reorder_down_", idx)]], {
+          move_attr_row(input$reorder_table, idx, idx + 1)
+        }, ignoreInit = TRUE)
+      })
+    })
+  })
+  
+  observeEvent(input$reorder_match_csv, {
+    tbl <- input$reorder_table
+    req(tbl)
+    df <- read_attr_file(tbl)
+    if (is.null(df) || nrow(df) == 0) {
+      reorder_warning(NULL)
+      reorder_missing_attrs(NULL)
+      return(invisible())
+    }
+    csv_order <- get_csv_header_order(tbl)
+    if (length(csv_order) == 0) {
+      reorder_warning("⚠️ Could not read CSV header for this table — no changes made.")
+      reorder_missing_attrs(NULL)
+      return(invisible())
+    }
+    
+    # CSV columns that have no corresponding attribute row at all — these are
+    # invisible to the reorder itself (nothing to move), so they're tracked
+    # and surfaced separately rather than silently dropped.
+    missing_attrs <- setdiff(csv_order, df$attributeName)
+    reorder_missing_attrs(if (length(missing_attrs) > 0) missing_attrs else NULL)
+    
+    matched_idx   <- match(csv_order, df$attributeName)
+    matched_idx   <- matched_idx[!is.na(matched_idx)]
+    unmatched_idx <- setdiff(seq_len(nrow(df)), matched_idx)
+    
+    new_order <- c(matched_idx, unmatched_idx)
+    df <- df[new_order, , drop = FALSE]
+    write_attr_file(tbl, df)
+    
+    unmatched_names <- if (length(unmatched_idx) > 0) df$attributeName[(length(matched_idx) + 1):nrow(df)] else character(0)
+    reorder_warning(if (length(unmatched_names) > 0) unmatched_names else NULL)
+  })
+  
   output$fix_sync_status <- renderUI(NULL)
   observeEvent(input$sync_from_excel_btn, {
     result <- tryCatch({
@@ -1010,14 +1404,12 @@ server <- function(input, output, session) {
     }
   })
   
-  # Also try an initial (silent) table refresh in case txt files already exist
   observe({
     if (input$task == "fix" && page() == 2) {
       isolate(refresh_fix_tables())
     }
   })
   
-  # ---- Queue buttons: each appends a pending operation to fix_queue ----
   add_to_queue <- function(op) {
     q <- fix_queue()
     q[[length(q) + 1]] <- op
@@ -1032,6 +1424,7 @@ server <- function(input, output, session) {
       unit = input$add_unit, datetime_format = input$add_datetime_format,
       missing_code = input$add_missing_code, missing_explanation = input$add_missing_explanation
     ))
+    session$sendCustomMessage("flash-queued", list(id = "queue_add", duration = 1500))
   })
   
   observeEvent(input$queue_rename, {
@@ -1040,6 +1433,7 @@ server <- function(input, output, session) {
       type = "rename", table = input$rename_table,
       old_name = input$rename_old_name, new_name = input$rename_new_name
     ))
+    session$sendCustomMessage("flash-queued", list(id = "queue_rename", duration = 1500))
   })
   
   observeEvent(input$queue_reclass, {
@@ -1048,14 +1442,15 @@ server <- function(input, output, session) {
       type = "reclass", table = input$reclass_table,
       name = input$reclass_name, new_class = input$reclass_new_class
     ))
+    session$sendCustomMessage("flash-queued", list(id = "queue_reclass", duration = 1500))
   })
   
   observeEvent(input$queue_delete, {
     req(input$delete_table, input$delete_name)
     add_to_queue(list(type = "delete", table = input$delete_table, name = input$delete_name))
+    session$sendCustomMessage("flash-queued", list(id = "queue_delete", duration = 1500))
   })
   
-  # ---- Render the pending queue with per-item remove buttons ----
   output$fix_queue_box <- renderUI({
     q <- fix_queue()
     if (length(q) == 0) return(tags$p(style = "color:#888; font-size:17px;", "No pending edits queued yet."))
@@ -1089,13 +1484,15 @@ server <- function(input, output, session) {
     })
   })
   
-  # ---- Apply Fixes: process the whole queue, then rebuild Excel via script 08 ----
-  observeEvent(input$apply_fixes_btn, {
+  # Shared apply-fixes logic, callable from either button. `log_box_id` lets
+  # each button write its progress to its own <pre> element so the person
+  # sees feedback wherever they clicked from.
+  run_apply_fixes <- function(log_box_id) {
     q <- fix_queue()
     log_lines_fix <- character(0)
     appendf <- function(msg) {
       log_lines_fix <<- c(log_lines_fix, msg)
-      shinyjs::html(id = "fix_log_box", html = paste(log_lines_fix, collapse = "\n"))
+      shinyjs::html(id = log_box_id, html = paste(log_lines_fix, collapse = "\n"))
     }
     
     if (length(q) == 0) {
@@ -1219,7 +1616,6 @@ server <- function(input, output, session) {
       }
     }
     
-    # ---- Rebuild the Excel workbook from the now-edited txt files ----
     appendf("⏳ Rebuilding Excel workbook (txt → excel)...")
     rebuild_ok <- tryCatch({
       source(file.path("source_code", "08_txt_to_excel.R"), local = .GlobalEnv)
@@ -1236,8 +1632,26 @@ server <- function(input, output, session) {
     }
     
     appendf(paste("■ Apply Fixes finished at", format(Sys.time(), "%H:%M:%S")))
+  }
+  
+  observeEvent(input$apply_fixes_btn, {
+    run_apply_fixes("fix_log_box")
   })
   
+  observeEvent(input$reorder_apply_fixes_btn, {
+    shinyjs::show(id = "reorder_fix_log_box")
+    run_apply_fixes("reorder_fix_log_box")
+  })
+  
+  output$reorder_apply_fixes_hint <- renderUI({
+    n <- length(fix_queue())
+    if (n == 0) {
+      tags$p(style = "color:#888; font-size:14.5px; margin-top:6px;", "No pending edits queued.")
+    } else {
+      tags$p(style = "color:#8a5a00; font-size:14.5px; margin-top:6px;",
+             sprintf("%d edit(s) queued — must click to apply before reordering picks them up.", n))
+    }
+  })
   # ---- Build config list from current inputs ----
   build_config <- reactive({
     list(
@@ -1258,8 +1672,9 @@ server <- function(input, output, session) {
       ready_to_publish       = input$ready_to_publish,
       confirm_publish        = input$confirm_publish,
       upload_data_package    = input$upload_data_package,
-      datastore_doi          = input$datastore_doi,
-      doi                    = input$doi,
+      doi_mode               = input$doi_mode,
+      ds_ref_code            = input$ds_ref_code,
+      doi                    = isolate(cfg())$doi,  # populated after publish; not a direct input
       project                = input$project,
       data_taxa_tables       = input$data_taxa_tables,
       data_taxa_fields       = input$data_taxa_fields,
@@ -1273,14 +1688,13 @@ server <- function(input, output, session) {
     )
   })
   
-  # ---- Save ----
+  # ---- Save / Load / Reset / Download (page 2, non-metadata tasks) ----
   observeEvent(input$save_btn, {
     jsonlite::write_json(build_config(), CONFIG_PATH, auto_unbox = TRUE, pretty = TRUE)
     cfg(build_config())
     status(paste("✅ Saved to", normalizePath(CONFIG_PATH, mustWork = FALSE), "at", format(Sys.time(), "%H:%M:%S")))
   })
   
-  # ---- Reload ----
   observeEvent(input$load_btn, {
     loaded <- load_config()
     cfg(loaded)
@@ -1288,7 +1702,6 @@ server <- function(input, output, session) {
     status(paste("📂 Reloaded from", CONFIG_PATH, "at", format(Sys.time(), "%H:%M:%S")))
   })
   
-  # ---- Reset ----
   observeEvent(input$reset_btn, {
     cfg(default_config)
     apply_config_to_inputs(default_config, keep_task = TRUE)
@@ -1300,7 +1713,6 @@ server <- function(input, output, session) {
   
   output$status_msg <- renderText(status())
   
-  # ---- Downloads ----
   output$download_json <- downloadHandler(
     filename = function() "workflow_config.json",
     content = function(file) {
@@ -1308,15 +1720,38 @@ server <- function(input, output, session) {
     }
   )
   
+  # ---- Save / Load / Reset / Download (page 4, metadata's Publishing page) ----
+  observeEvent(input$save_btn_p4, {
+    jsonlite::write_json(build_config(), CONFIG_PATH, auto_unbox = TRUE, pretty = TRUE)
+    cfg(build_config())
+    status(paste("✅ Saved to", normalizePath(CONFIG_PATH, mustWork = FALSE), "at", format(Sys.time(), "%H:%M:%S")))
+  })
+  
+  observeEvent(input$load_btn_p4, {
+    loaded <- load_config()
+    cfg(loaded)
+    apply_config_to_inputs(loaded, keep_task = FALSE)
+    status(paste("📂 Reloaded from", CONFIG_PATH, "at", format(Sys.time(), "%H:%M:%S")))
+  })
+  
+  observeEvent(input$reset_btn_p4, {
+    cfg(default_config)
+    apply_config_to_inputs(default_config, keep_task = TRUE)
+    status("↺ Reset to defaults (not yet saved). Your current step was left as-is.")
+  })
+  
+  output$status_msg_p4 <- renderText(status())
+  
+  output$download_json_p4 <- downloadHandler(
+    filename = function() "workflow_config.json",
+    content = function(file) {
+      jsonlite::write_json(build_config(), file, auto_unbox = TRUE, pretty = TRUE)
+    }
+  )
+  
   # ==========================================================================
-  # ---- Run: sources 01-10 source_code scripts based on config ----
+  # ---- Run: sources 01-10 source_code scripts based on config (page 2) ----
   # ==========================================================================
-  # Progress is written directly to the DOM via shinyjs::html() rather than
-  # through reactiveVal + renderUI/renderText. Reactive outputs only repaint
-  # once Shiny's event loop flushes, which happens after the whole
-  # observeEvent finishes — since source() runs synchronously in a loop here,
-  # that would mean no visible updates until the entire run is done.
-  # Direct DOM writes happen immediately, so the log/step list update live.
   step_status <- new.env()
   
   render_steps_html <- function() {
@@ -1349,8 +1784,6 @@ server <- function(input, output, session) {
     
     c0 <- build_config()
     
-    # ---- 1. Push config values into the global environment, exactly as the
-    # original hardcoded script did, so source()'d scripts can see them. ----
     assign("working_folder", working_folder, envir = .GlobalEnv)
     assign("metadata_template", metadata_template, envir = .GlobalEnv)
     assign("metadata_file", list.files(filled_form_folder, pattern = "\\.xlsx$", full.names = TRUE)[1], envir = .GlobalEnv)
@@ -1392,8 +1825,10 @@ server <- function(input, output, session) {
     assign("cui_code", c0$cui_code, envir = .GlobalEnv)
     assign("int_rights", c0$int_rights, envir = .GlobalEnv)
     assign("language", c0$language, envir = .GlobalEnv)
-    assign("ready_to_publish", isTRUE(c0$ready_to_publish) && isTRUE(c0$confirm_publish), envir = .GlobalEnv)
-    assign("upload_data_package", isTRUE(c0$ready_to_publish) && isTRUE(c0$confirm_publish) && isTRUE(c0$upload_data_package), envir = .GlobalEnv)
+    # Publishing now happens on its own page/button (publish_btn) — the main
+    # Run here never sets a DOI/project or uploads, regardless of checkbox state.
+    assign("ready_to_publish", FALSE, envir = .GlobalEnv)
+    assign("upload_data_package", FALSE, envir = .GlobalEnv)
     assign("datastore_doi", c0$datastore_doi, envir = .GlobalEnv)
     assign("doi", c0$doi, envir = .GlobalEnv)
     assign("project", c0$project, envir = .GlobalEnv)
@@ -1415,7 +1850,6 @@ server <- function(input, output, session) {
     append_log(paste("▶ Run started at", format(Sys.time(), "%H:%M:%S")))
     append_log(paste("  task =", c0$task, "| geo_data =", c0$geo_data, "| tax_data =", c0$tax_data))
     
-    # ---- 2. Compute dates_df / startdate / enddate, same as original script ----
     tryCatch({
       dates_df <- read.csv(file.path(working_folder, c0$data_dates_table))
       assign("dates_df", dates_df, envir = .GlobalEnv)
@@ -1430,7 +1864,6 @@ server <- function(input, output, session) {
       append_log(paste("❌ Error computing dates_df/startdate/enddate:", conditionMessage(e)))
     })
     
-    # ---- 3. Source each numbered script in order, respecting run_* flags ----
     steps <- list(
       list(id = "01_attribute_generation.R",        run = run_attribute_gen),
       list(id = "02_attribute_check.R",              run = run_attribute_check),
@@ -1489,13 +1922,13 @@ server <- function(input, output, session) {
       shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:16px 20px; border-radius:12px; font-size:17.5px; margin-top:6px;';")
     } else {
       shinyjs::html(id = "pipeline_done_banner",
-                    html = "✅ <strong>Run finished.</strong> You can close this window now.")
+                    html = "✅ <strong>Run finished.</strong> Continue to the next step below.")
       shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:16px 20px; border-radius:12px; font-size:17.5px; margin-top:6px;';")
     }
   })
   
   # ==========================================================================
-  # ---- Run Checks: EML validate / DPchecker, independent of Run ----
+  # ---- Run Checks: EML validate / DPchecker (page 3) ----
   # ==========================================================================
   checks_log <- character(0)
   append_checks_log <- function(msg, raw = FALSE) {
@@ -1504,14 +1937,9 @@ server <- function(input, output, session) {
     shinyjs::html(id = "checks_log_box", html = html_text)
   }
   
-  # ---- Clean up captured console text for display: strip any ANSI escape
-  # codes (color, cursor movement, hyperlinks, etc. from cli) using cli's own
-  # ansi_strip(), fix encoding, then HTML-escape. No color styling — just
-  # make sure the text itself reads correctly. ----
   style_check_lines <- function(text) {
     Encoding(text) <- "UTF-8"
     text <- tryCatch(cli::ansi_strip(text), error = function(e) text)
-    # Fallback cleanup in case any stray escape fragments remain
     text <- gsub("\u001b\\[[0-9;?]*[a-zA-Z]", "", text, perl = TRUE)
     text <- gsub("\u001b\\][^\u0007\u001b]*(\u0007|\u001b\\\\)", "", text, perl = TRUE)
     text <- gsub("[\u0080-\u009F]", "", text, perl = TRUE)
@@ -1527,7 +1955,7 @@ server <- function(input, output, session) {
     xml_path <- get_xml_path()
     append_checks_log(paste("▶ Running EML::eml_validate() at", format(Sys.time(), "%H:%M:%S")))
     if (!file.exists(xml_path)) {
-      append_checks_log(paste("❌ File not found:", xml_path, "— run Create Metadata first."))
+      append_checks_log(paste("❌ File not found:", xml_path, "— go back and run Create Metadata first."))
       return(invisible())
     }
     result <- tryCatch({
@@ -1543,13 +1971,14 @@ server <- function(input, output, session) {
       FALSE
     })
     append_checks_log(paste("■ EML validate finished at", format(Sys.time(), "%H:%M:%S")))
+    checks_run_at_least_once(TRUE)
   })
   
   observeEvent(input$run_dpchecker_btn, {
     xml_path <- get_xml_path()
     append_checks_log(paste("▶ Running DPchecker::run_congruence_checks() at", format(Sys.time(), "%H:%M:%S")))
     if (!file.exists(xml_path)) {
-      append_checks_log(paste("❌ File not found:", xml_path, "— run Create Metadata first."))
+      append_checks_log(paste("❌ File not found:", xml_path, "— go back and run Create Metadata first."))
       return(invisible())
     }
     xml_working <- file.path(working_folder, basename(xml_path))
@@ -1570,6 +1999,183 @@ server <- function(input, output, session) {
       append_checks_log("  ✅ DPchecker run completed — see R console above for results.")
     }
     append_checks_log(paste("■ DPchecker run finished at", format(Sys.time(), "%H:%M:%S")))
+    checks_run_at_least_once(TRUE)
+  })
+  
+  # ==========================================================================
+  # ---- Publish: applies DOI/project/upload to the EXISTING EML file ----
+  # ---- (page 4), without regenerating it via make_eml(). ----
+  # ==========================================================================
+  publish_log_lines <- character(0)
+  append_publish_log <- function(msg) {
+    publish_log_lines <<- c(publish_log_lines, msg)
+    shinyjs::html(id = "publish_log_box", html = paste(publish_log_lines, collapse = "\n"))
+  }
+  
+  # ---- Check both the on-disk XML and the saved JSON config for an existing
+  # DOI, since the two can drift out of sync (hand-edited XML, stale JSON from
+  # an earlier run, etc). Returns the existing DOI string if found in either
+  # place, or NULL if neither has one. ----
+  find_existing_doi <- function(xml_path) {
+    doi_from_xml <- NULL
+    if (file.exists(xml_path)) {
+      doi_from_xml <- tryCatch({
+        my_metadata <- EML::read_eml(xml_path, from = "xml")
+        alt_id <- my_metadata$dataset$alternateIdentifier
+        if (!is.null(alt_id) && length(alt_id) > 0) {
+          val <- if (is.list(alt_id)) alt_id[[1]] else alt_id[1]
+          if (!is.null(val) && nzchar(val)) val else NULL
+        } else {
+          NULL
+        }
+      }, error = function(e) NULL)
+    }
+    
+    doi_from_json <- NULL
+    saved_cfg <- load_config()
+    if (!is.null(saved_cfg$doi) && nzchar(saved_cfg$doi)) {
+      doi_from_json <- saved_cfg$doi
+    }
+    
+    list(xml = doi_from_xml, json = doi_from_json)
+  }
+  
+  # ---- Does the actual publish work once the user has confirmed through any
+  # necessary modal. Separated out so it can be called either immediately (no
+  # existing DOI found) or after modal confirmation. ----
+  do_publish <- function() {
+    publish_log_lines <<- character(0)
+    shinyjs::html(id = "publish_log_box", html = "")
+    shinyjs::html(id = "publish_done_banner", html = "")
+    shinyjs::hide(id = "publish_done_banner")
+    
+    c0 <- build_config()
+    xml_path <- paste0(c0$metadata_id, "_metadata.xml")
+    
+    append_publish_log(paste("▶ Publish started at", format(Sys.time(), "%H:%M:%S")))
+    
+    if (!file.exists(xml_path)) {
+      append_publish_log(paste("❌ File not found:", xml_path, "— go back and run Create Metadata first."))
+      shinyjs::html(id = "publish_done_banner",
+                    html = "❌ <strong>Publish stopped — metadata file not found.</strong>")
+      shinyjs::runjs("document.getElementById('publish_done_banner').style.cssText = 'display:block; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:16px 20px; border-radius:12px; font-size:17.5px; margin-top:6px;';")
+      return(invisible())
+    }
+    
+    result <- tryCatch({
+      append_publish_log(paste("⏳ Reading existing metadata from", xml_path, "..."))
+      my_metadata <- EML::read_eml(xml_path, from = "xml")
+      
+      if (identical(input$doi_mode, "existing")) {
+        ds_ref <- trimws(input$ds_ref_code)
+        if (!nzchar(ds_ref)) {
+          stop("No DataStore reference code entered. Go back and enter the 7-digit code, or switch to 'Create a new DOI'.")
+        }
+        append_publish_log(paste("⏳ Setting DOI from existing DataStore reference code", ds_ref, "..."))
+        my_metadata <- EMLeditor::set_doi(my_metadata, ds_ref, force = TRUE)
+      } else {
+        append_publish_log("⏳ Creating a new DOI (initiating a draft reference on DataStore)...")
+        my_metadata <- EMLeditor::set_datastore_doi(my_metadata, force = TRUE)
+      }
+      
+      append_publish_log(paste("⏳ Setting project =", c0$project))
+      my_metadata <- EMLeditor::set_project(my_metadata, c0$project)
+      
+      append_publish_log(paste("⏳ Writing updated metadata back to", xml_path, "..."))
+      EML::write_eml(my_metadata, xml_path)
+      
+      xml_text <- readLines(xml_path, warn = FALSE)
+      xml_text <- gsub("<alternateIdentifier>doi: ", "<alternateIdentifier>", xml_text)
+      writeLines(xml_text, xml_path)
+      
+      # Record the resulting DOI back into the saved config, so future
+      # "existing DOI" checks (find_existing_doi) see it even if the XML
+      # alone isn't checked (e.g. before Create Metadata is re-run).
+      new_alt_id <- tryCatch({
+        reread <- EML::read_eml(xml_path, from = "xml")
+        alt_id <- reread$dataset$alternateIdentifier
+        if (!is.null(alt_id) && length(alt_id) > 0) {
+          val <- if (is.list(alt_id)) alt_id[[1]] else alt_id[1]
+          if (!is.null(val) && nzchar(val)) val else NULL
+        } else {
+          NULL
+        }
+      }, error = function(e) NULL)
+      
+      if (!is.null(new_alt_id)) {
+        updated_cfg <- isolate(cfg())
+        updated_cfg$doi <- new_alt_id
+        cfg(updated_cfg)
+        jsonlite::write_json(updated_cfg, CONFIG_PATH, auto_unbox = TRUE, pretty = TRUE)
+        append_publish_log(paste("  Recorded DOI in saved config:", new_alt_id))
+      }
+      
+      if (isTRUE(c0$upload_data_package)) {
+        append_publish_log("⏳ Uploading data package to DataStore...")
+        EMLeditor::upload_data_package()
+        append_publish_log("✅ Data package uploaded.")
+      } else {
+        append_publish_log("  (Upload not checked — DOI/project set, nothing uploaded.)")
+      }
+      
+      TRUE
+    }, error = function(e) {
+      append_publish_log(paste("❌ Error during publish:", conditionMessage(e)))
+      FALSE
+    })
+    
+    append_publish_log(paste("■ Publish ended at", format(Sys.time(), "%H:%M:%S")))
+    
+    if (isTRUE(result)) {
+      shinyjs::html(id = "publish_done_banner",
+                    html = "✅ <strong>Publish finished.</strong> You can close this window now.")
+      shinyjs::runjs("document.getElementById('publish_done_banner').style.cssText = 'display:block; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:16px 20px; border-radius:12px; font-size:17.5px; margin-top:6px;';")
+    } else {
+      shinyjs::html(id = "publish_done_banner",
+                    html = "❌ <strong>Publish stopped due to an error.</strong> Check the log above.")
+      shinyjs::runjs("document.getElementById('publish_done_banner').style.cssText = 'display:block; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:16px 20px; border-radius:12px; font-size:17.5px; margin-top:6px;';")
+    }
+  }
+  
+  observeEvent(input$publish_btn, {
+    if (!isTRUE(input$ready_to_publish) || !isTRUE(input$confirm_publish)) {
+      publish_log_lines <<- character(0)
+      shinyjs::html(id = "publish_log_box", html = "")
+      append_publish_log("⚠️ Check \"Ready to Publish\" and the confirmation checkbox above before running Publish.")
+      return(invisible())
+    }
+    
+    c0 <- isolate(build_config())
+    xml_path <- paste0(c0$metadata_id, "_metadata.xml")
+    existing <- find_existing_doi(xml_path)
+    
+    if (!is.null(existing$xml) || !is.null(existing$json)) {
+      sources <- c()
+      if (!is.null(existing$xml))  sources <- c(sources, sprintf("metadata file (%s): %s", basename(xml_path), existing$xml))
+      if (!is.null(existing$json)) sources <- c(sources, sprintf("saved config (%s): %s", CONFIG_PATH, existing$json))
+      
+      showModal(modalDialog(
+        title = "⚠️ Existing DOI found",
+        tags$div(
+          tags$p("This package already appears to have a DOI:"),
+          tags$ul(lapply(sources, tags$li)),
+          tags$p(style = "font-weight:600; color:#a12a1a;",
+                 "Continuing may overwrite this DOI with a new one. This cannot be easily undone.")
+        ),
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("confirm_overwrite_doi", "Overwrite and Continue", class = "btn-primary")
+        ),
+        easyClose = FALSE
+      ))
+    } else {
+      do_publish()
+    }
+  })
+  
+  observeEvent(input$confirm_overwrite_doi, {
+    removeModal()
+    do_publish()
   })
 }
 

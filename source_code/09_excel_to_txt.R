@@ -83,16 +83,39 @@ for (file_name in unique_files) {
   process_and_write_txt(file_name, file_data)
 }
 
-# Read data names and descriptions back from the filled Excel sheet
+
+#### table_info ####
+
+# Read data names and descriptions back from the filled Excel sheet.
+# Pull both columns together (not separately) so a blank name or blank
+# description doesn't desynchronize the two vectors.
 init_sheet <- read.xlsx(metadata_file, sheet = "table_info")
 
-data_names        <- init_sheet[3:nrow(init_sheet), 2]  
-data_descriptions <- init_sheet[3:nrow(init_sheet), 3]  
+table_info_raw <- init_sheet[3:nrow(init_sheet), 2:3]
+colnames(table_info_raw) <- c("data_names", "data_descriptions")
 
-# Drop any empty rows (in case template has more rows than datasets)
-data_names        <- data_names[!is.na(data_names)]
-data_descriptions <- data_descriptions[!is.na(data_descriptions)]
+# Keep rows where at least one of the two columns is non-empty.
+# (A row that's blank in both columns is just unused template space.)
+keep_rows <- !is.na(table_info_raw$data_names) | !is.na(table_info_raw$data_descriptions)
+table_info_data <- table_info_raw[keep_rows, , drop = FALSE]
 
+# Clean embedded line breaks/tabs, then turn any "NA" string introduced by
+# as.character(NA) back into a true blank so empty cells stay empty rather
+# than becoming the literal text "NA".
+table_info_data[] <- lapply(table_info_data, function(x) {
+  x <- clean_text(x)
+  x[x == "NA"] <- ""
+  x
+})
+
+write.table(
+  table_info_data,
+  file = file.path(filled_form_folder, "table_info.txt"),
+  sep = "\t",
+  row.names = FALSE,
+  col.names = FALSE,
+  quote = FALSE
+)
 
 #### abstract ####
 
@@ -333,4 +356,3 @@ for (file_name in unique_files) {
 }
 
 ##### end #####
-

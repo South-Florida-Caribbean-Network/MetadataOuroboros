@@ -1,4 +1,3 @@
-
 #------------------------------ TXT TO EXCEL -----------------------------------
 
 #### Metadata Template #####
@@ -152,31 +151,59 @@ for (txt_file in txt_files) {
 }
 
 #---------------------- Table Names and Descriptions ---------------------------
+# table_info.txt is written by the EXCEL TO TXT script as two tab-separated
+# columns (data_names, data_descriptions), no header row. We read it back here
+# and treat it as the single source of truth for this sheet.
 
-# Need to keep certain columns from accidental editing.
-rows_written <- 4:(4 + length(data_files) - 1)
-unlocked_style <- createStyle(locked = FALSE)
-addStyle(
-  wb,
-  sheet = "table_info",
-  style  = unlocked_style,
-  rows   = rows_written,
-  cols   = c(2, 3),          
-  gridExpand = TRUE,
-  stack = TRUE         
-)
-writeData(
-  wb,
-  sheet = "table_info",
-  x = basename(data_files),
-  startCol = 1,
-  startRow = 4,
-  colNames = FALSE,
-  rowNames = FALSE
-)
+txt_file <- file.path(working_folder, "table_info.txt")
 
-# Final save the workbook after all files have been processed
-saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
+if (!file.exists(txt_file)) {
+  
+  message("table_info.txt not found — skipping Table Names and Descriptions sheet.")
+  
+} else {
+  
+  table_info_data <- read_delim(
+    txt_file,
+    delim = "\t",
+    col_names = FALSE,
+    col_types = cols(.default = "c")  # force character parsing so names/descriptions
+    # that look numeric aren't coerced
+  )
+  
+  if (nrow(table_info_data) == 0) {
+    
+    message("table_info.txt is empty — skipping Table Names and Descriptions sheet.")
+    
+  } else {
+    
+    # Need to keep certain columns from accidental editing.
+    rows_written <- 4:(4 + nrow(table_info_data) - 1)
+    unlocked_style <- createStyle(locked = FALSE)
+    addStyle(
+      wb,
+      sheet = "table_info",
+      style  = unlocked_style,
+      rows   = rows_written,
+      cols   = c(2, 3),          
+      gridExpand = TRUE,
+      stack = TRUE         
+    )
+    
+    writeData(
+      wb,
+      sheet = "table_info",
+      x = table_info_data,
+      startCol = 1,
+      startRow = 4,
+      colNames = FALSE,
+      rowNames = FALSE
+    )
+    
+    # Final save the workbook after all files have been processed
+    saveWorkbook(wb, new_metadata_file, overwrite = TRUE)
+  }
+}
 
 
 # ---------------- Methods -----------------------------------------------------
