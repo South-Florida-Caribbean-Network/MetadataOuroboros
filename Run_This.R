@@ -130,30 +130,170 @@ ui <- fluidPage(
     });
   ")),
   tags$head(tags$style(HTML("
-    body { background-color: #f7f8fa; font-size: 16px; }
-    .well { background-color: #ffffff; border: 1px solid #e2e4e8; }
-    h3 { margin-top: 0; }
-    label, .control-label { font-size: 15px; }
-    .form-control, select.form-control { font-size: 15px; }
-    p, .help-block, .shiny-input-container small { font-size: 14.5px; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    
+    * { box-sizing: border-box; }
+    
+    body {
+      background: linear-gradient(135deg, #f7f5ef 0%, #f3f0e6 50%, #eef2ea 100%);
+      background-attachment: fixed;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 18px;
+      color: #2b2620;
+    }
+    
+    .container-fluid { max-width: 1300px; }
+    
+    .title-panel-custom {
+      font-weight: 800;
+      font-size: 2.4rem;
+      background: linear-gradient(90deg, #4d6a4a, #8a6c3f, #a0522d);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+    
+    .well {
+      background: #fffdf9;
+      border: 1px solid #e8e1d2;
+      border-radius: 16px;
+      box-shadow: 0 1px 2px rgba(74,58,30,0.04), 0 8px 24px -8px rgba(74,58,30,0.10);
+      padding: 24px 26px;
+      transition: box-shadow 0.25s ease, transform 0.15s ease;
+    }
+    .well:hover {
+      box-shadow: 0 1px 3px rgba(74,58,30,0.06), 0 14px 32px -10px rgba(74,58,30,0.16);
+    }
+    
+    label, .control-label { font-size: 16.5px; font-weight: 600; color: #4a4335; letter-spacing: 0.01em; }
+    
+    .form-control, select.form-control {
+      font-size: 17px;
+      border-radius: 10px;
+      border: 1.5px solid #e3dcc9;
+      padding: 10px 13px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      background-color: #fffefb;
+    }
+    .form-control:focus, select.form-control:focus {
+      border-color: #5c7a52;
+      box-shadow: 0 0 0 4px rgba(92,122,82,0.14);
+      background-color: #ffffff;
+    }
+    
+    p, .help-block, .shiny-input-container small { font-size: 16px; color: #6b6354; }
+    
     .section-title {
-      font-weight: 600; font-size: 17px; color: #2c3e50;
-      border-bottom: 2px solid #4a90d9; padding-bottom: 4px; margin-bottom: 14px;
+      font-weight: 700;
+      font-size: 18.5px;
+      color: #2b2620;
+      position: relative;
+      padding-bottom: 10px;
+      padding-left: 2px;
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
     }
+    .section-title::after {
+      content: '';
+      position: absolute;
+      left: 2px; bottom: 0;
+      width: 42px; height: 4px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #4d6a4a, #a0522d);
+    }
+    
     .derived-box {
-      background: #eef3fb; border-radius: 6px; padding: 10px 14px;
-      font-family: monospace; font-size: 14px;
+      background: linear-gradient(135deg, #eef2ea, #f3ead9);
+      border: 1px solid #ddd3b8;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 15px;
+      color: #3d3824;
     }
+    
     .code-preview {
-      background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 6px;
-      font-family: monospace; font-size: 13.5px; white-space: pre-wrap;
+      background: #22201a; color: #e8e2d4; padding: 14px; border-radius: 12px;
+      font-family: 'SF Mono', Consolas, monospace; font-size: 15px; white-space: pre-wrap;
       max-height: 480px; overflow-y: auto;
     }
-    .page-nav { margin: 18px 0; }
-    .btn { font-size: 15px; }
+    
+    .page-nav { margin: 22px 0; }
+    
+    .btn {
+      font-size: 16px;
+      font-weight: 700;
+      border-radius: 10px;
+      padding: 11px 19px;
+      border: 1.5px solid transparent;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+      letter-spacing: 0.01em;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(43,38,32,0.12);
+    }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.04); }
+    .btn:active { transform: translateY(0); }
+    
+    .btn.btn-primary,
+    .btn.btn-primary:visited,
+    .btn.btn-primary span,
+    .btn.btn-primary * {
+      background: linear-gradient(135deg, #5c7a52, #3f5c38) !important;
+      background-color: #4a6b42 !important;
+      color: #ffffff !important;
+      border-color: #3f5c38 !important;
+      box-shadow: 0 4px 14px -4px rgba(63,92,56,0.55);
+    }
+    .btn.btn-primary:hover, .btn.btn-primary:focus,
+    .btn.btn-primary:hover *, .btn.btn-primary:focus * {
+      background: linear-gradient(135deg, #6a8a5f, #4a6b42) !important;
+      color: #ffffff !important;
+      box-shadow: 0 6px 18px -4px rgba(63,92,56,0.65);
+    }
+    
+    #run_pipeline_btn span, #run_pipeline_btn * {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    
+    .btn.btn-default,
+    .btn.btn-default:visited {
+      background-color: #efe7d4 !important;
+      color: #4a4327 !important;
+      border-color: #d9cca3 !important;
+    }
+    .btn.btn-default:hover, .btn.btn-default:focus {
+      background-color: #e6dcc3 !important;
+      color: #38331f !important;
+      border-color: #c9b98a !important;
+    }
+    
+    #run_pipeline_btn.btn-primary {
+      background: linear-gradient(135deg, #5c7a52, #3f5c38) !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 14px -4px rgba(63,92,56,0.55) !important;
+    }
+    
+    hr { border-top: 1.5px solid #ebe4d3; }
+    
+    pre {
+      border-radius: 12px !important;
+    }
+    
+    /* Checkboxes get a little visual lift */
+    .checkbox label, .shiny-input-container .checkbox { font-weight: 500; }
+    
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #d9cfb0; border-radius: 8px; }
+    ::-webkit-scrollbar-thumb:hover { background: #c4b894; }
   "))),
   
-  titlePanel("Metadata Dashboard"),
+  div(style = "padding: 8px 2px 18px 2px;",
+      div(class = "title-panel-custom", "Metadata Dashboard")
+  ),
   
   # ---------------- PAGE 1 ----------------
   conditionalPanel(
@@ -189,6 +329,10 @@ ui <- fluidPage(
     ),
     div(class = "page-nav",
         actionButton("to_page2", "Next →", class = "btn-primary", width = "200px")
+    ),
+    
+    div(style = "text-align:center; padding: 18px 0 6px 0; color:#a39a7f; font-size:14px;",
+        "Dashboard made by Katie Herrmann"
     )
   ),
   
@@ -326,7 +470,7 @@ ui <- fluidPage(
                  ),
                  br(),
                  tags$pre(id = "checks_log_box",
-                          style = "background:#fdfdfd; color:#1a1a1a; border:1px solid #d5d8dc; padding:12px; border-radius:6px; font-size:13px; font-family: Consolas, 'Courier New', monospace; line-height:1.45; max-height:420px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;",
+                          style = "background:#fdfdfd; color:#1a1a1a; border:1px solid #d5d8dc; padding:12px; border-radius:6px; font-size:15px; font-family: Consolas, 'Courier New', monospace; line-height:1.45; max-height:420px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;",
                           "")
                )
         )
@@ -369,7 +513,7 @@ ui <- fluidPage(
         column(12,
                wellPanel(
                  div(class = "section-title", "Attribute Fix"),
-                 p(style = "color:#555; font-size:15px;",
+                 p(style = "color:#555; font-size:17px;",
                    "Syncs from the filled Excel workbook (excel → txt), lets you queue up ",
                    "add/rename/reclass/delete edits below, then rebuilds the workbook (txt → excel) ",
                    "when you click Apply Fixes."),
@@ -410,7 +554,7 @@ ui <- fluidPage(
                  selectInput("reclass_table", "Table", choices = character(0)),
                  selectInput("reclass_name", "Existing attribute", choices = character(0)),
                  selectInput("reclass_new_class", "New class", choices = c("numeric", "categorical", "character", "Date")),
-                 p(style = "color:#777; font-size:14px;", "Changing to 'categorical' auto-generates catvars codes from the CSV's unique values (definitions left blank to fill in). Changing away from 'categorical' removes its catvars rows."),
+                 p(style = "color:#777; font-size:16px;", "Changing to 'categorical' auto-generates catvars codes from the CSV's unique values (definitions left blank to fill in). Changing away from 'categorical' removes its catvars rows."),
                  actionButton("queue_reclass", "Queue: Reclass Attribute", width = "100%")
                )
         ),
@@ -419,7 +563,7 @@ ui <- fluidPage(
                  div(class = "section-title", "🗑 Delete Attribute"),
                  selectInput("delete_table", "Table", choices = character(0)),
                  selectInput("delete_name", "Existing attribute", choices = character(0)),
-                 p(style = "color:#777; font-size:14px;", "Also removes any catvars rows for this attribute, if it was categorical."),
+                 p(style = "color:#777; font-size:16px;", "Also removes any catvars rows for this attribute, if it was categorical."),
                  actionButton("queue_delete", "Queue: Delete Attribute", width = "100%")
                )
         )
@@ -444,6 +588,7 @@ ui <- fluidPage(
         actionButton("to_page1", "← Back", width = "160px"),
         conditionalPanel(
           condition = "input.task == 'workbook' || input.task == 'metadata'",
+          style = "margin-top: 12px;",
           actionButton("rescan_btn", "🔄 Re-scan folder", width = "200px")
         )
     ),
@@ -455,7 +600,7 @@ ui <- fluidPage(
         column(12,
                wellPanel(
                  div(class = "section-title", "Rebuild Workbook"),
-                 p(style = "color:#555; font-size:15px;",
+                 p(style = "color:#555; font-size:17px;",
                    "Rebuilds the Excel workbook directly from the existing txt files in working_folder. ",
                    "No other setup needed — just click Run below.")
                )
@@ -471,10 +616,17 @@ ui <- fluidPage(
                  div(class = "section-title", "Run"),
                  conditionalPanel(
                    condition = "input.task == 'workbook'",
-                   p(style = "color:#555; font-size:15px;",
+                   p(style = "color:#555; font-size:17px;",
                      "Builds your Excel workbook based on your current settings above. ",
                      "Some steps may open interactive dialogs/tables outside the browser (e.g. in RStudio) — ",
                      "watch the R console and resolve those before continuing.")
+                 ),
+                 conditionalPanel(
+                   condition = "input.task == 'metadata'",
+                   p(style = "color:#555; font-size:17px;",
+                     "Create the metadata package (EML file) from your filled-in Excel workbook. ",
+                     "This needs to be run at least once before you can use Run Checks above — ",
+                     "EML Validate and DPchecker both require the metadata file to already exist.")
                  ),
                  actionButton("run_pipeline_btn", "▶ Run", class = "btn-primary", width = "260px"),
                  uiOutput("publish_run_warning"),
@@ -495,7 +647,7 @@ ui <- fluidPage(
       column(12,
              wellPanel(
                div(class = "section-title", "Save / Load / Export"),
-               p(style = "color:#555; font-size:15px; font-style:italic;",
+               p(style = "color:#555; font-size:17px; font-style:italic;",
                  "Tired of filling in fields over and over again? Save your settings here!"),
                fluidRow(
                  column(3, actionButton("save_btn", "💾 Save answers to JSON", width = "100%", class = "btn-primary")),
@@ -507,6 +659,10 @@ ui <- fluidPage(
                verbatimTextOutput("status_msg")
              )
       )
+    ),
+    
+    div(style = "text-align:center; padding: 18px 0 6px 0; color:#a39a7f; font-size:14px;",
+        "Dashboard made by Katie Herrmann"
     )
   )
 )
@@ -538,14 +694,34 @@ server <- function(input, output, session) {
     if (armed) {
       updateActionButton(session, "run_pipeline_btn", label = "🚀 Publish")
       shinyjs::runjs("
-        var btn = document.getElementById('run_pipeline_btn');
-        if (btn) { btn.style.backgroundColor = '#c0392b'; btn.style.borderColor = '#a93226'; }
+        setTimeout(function() {
+          var btn = document.getElementById('run_pipeline_btn');
+          if (btn) {
+            btn.style.setProperty('background', 'linear-gradient(135deg, #b5533d, #8c3f2d)', 'important');
+            btn.style.setProperty('box-shadow', '0 4px 14px -4px rgba(140,63,45,0.6)', 'important');
+            btn.style.setProperty('color', '#ffffff', 'important');
+            btn.style.setProperty('border-color', '#8c3f2d', 'important');
+            var children = btn.querySelectorAll('*');
+            children.forEach(function(el) {
+              el.style.setProperty('background', 'transparent', 'important');
+              el.style.setProperty('box-shadow', 'none', 'important');
+              el.style.setProperty('color', '#ffffff', 'important');
+            });
+          }
+        }, 50);
       ")
     } else {
       updateActionButton(session, "run_pipeline_btn", label = "▶ Run")
       shinyjs::runjs("
-        var btn = document.getElementById('run_pipeline_btn');
-        if (btn) { btn.style.backgroundColor = ''; btn.style.borderColor = ''; }
+        setTimeout(function() {
+          var btn = document.getElementById('run_pipeline_btn');
+          if (btn) {
+            btn.style.removeProperty('background');
+            btn.style.removeProperty('box-shadow');
+            btn.style.removeProperty('color');
+            btn.style.removeProperty('border-color');
+          }
+        }, 50);
       ")
     }
   })
@@ -555,7 +731,7 @@ server <- function(input, output, session) {
       isTRUE(input$ready_to_publish) &&
       isTRUE(input$confirm_publish)
     if (armed) {
-      tags$p(style = "color:#c0392b; font-size:14px; font-weight:600; margin-top:8px;",
+      tags$p(style = "color:#c0392b; font-size:16px; font-weight:600; margin-top:8px;",
              "🚀 Clicking Publish will finalize and publish this data package.")
     }
   })
@@ -711,8 +887,8 @@ server <- function(input, output, session) {
     if (msg == "") return(NULL)
     is_warning <- grepl("^⚠️", msg)
     tags$div(
-      style = sprintf("padding:10px 14px; border-radius:6px; margin-bottom:14px; font-size:15px; %s",
-                      if (is_warning) "background:#fdecea; color:#c0392b;" else "background:#eafaf1; color:#1e8449;"),
+      style = sprintf("padding:12px 16px; border-radius:12px; margin-bottom:16px; font-size:16.5px; font-weight:600; %s",
+                      if (is_warning) "background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;" else "background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0;"),
       msg
     )
   })
@@ -722,9 +898,9 @@ server <- function(input, output, session) {
     n <- length(strsplit(trimws(input$package_title), "\\s+")[[1]])
     if (input$package_title == "") return(NULL)
     if (n < 5) {
-      tags$p(style = "color:#c0392b; font-size:14px;", sprintf("⚠️ Only %d word(s) — needs 5 or more.", n))
+      tags$p(style = "color:#b91c1c; font-size:15.5px; font-weight:600;", sprintf("⚠️ Only %d word(s) — needs 5 or more.", n))
     } else {
-      tags$p(style = "color:#27ae60; font-size:14px;", sprintf("✅ %d words.", n))
+      tags$p(style = "color:#15803d; font-size:15.5px; font-weight:600;", sprintf("✅ %d words.", n))
     }
   })
   
@@ -733,12 +909,12 @@ server <- function(input, output, session) {
     wf <- working_folder
     f <- file.path(wf, input$data_dates_table)
     if (!file.exists(f)) {
-      output$date_range_output <- renderUI(tags$p(style = "color:#c0392b; font-size:14px;", paste("⚠️ File not found:", f)))
+      output$date_range_output <- renderUI(tags$p(style = "color:#c0392b; font-size:16px;", paste("⚠️ File not found:", f)))
       return(invisible())
     }
     df <- tryCatch(read.csv(f, stringsAsFactors = FALSE), error = function(e) NULL)
     if (is.null(df) || !(input$data_startdate_field %in% names(df)) || !(input$data_enddate_field %in% names(df))) {
-      output$date_range_output <- renderUI(tags$p(style = "color:#c0392b; font-size:14px;", "⚠️ Column(s) not found in file."))
+      output$date_range_output <- renderUI(tags$p(style = "color:#c0392b; font-size:16px;", "⚠️ Column(s) not found in file."))
       return(invisible())
     }
     start_parsed <- suppressWarnings(as.Date(min(lubridate::parse_date_time(
@@ -822,14 +998,14 @@ server <- function(input, output, session) {
       TRUE
     }, error = function(e) {
       output$fix_sync_status <<- renderUI(
-        tags$p(style = "color:#c0392b; font-size:15px;", paste("❌ Sync failed:", conditionMessage(e)))
+        tags$p(style = "color:#c0392b; font-size:17px;", paste("❌ Sync failed:", conditionMessage(e)))
       )
       FALSE
     })
     if (isTRUE(result)) {
       refresh_fix_tables()
       output$fix_sync_status <- renderUI(
-        tags$p(style = "color:#1e8449; font-size:15px;", "✅ Synced from Excel. Tables refreshed below.")
+        tags$p(style = "color:#1e8449; font-size:17px;", "✅ Synced from Excel. Tables refreshed below.")
       )
     }
   })
@@ -882,7 +1058,7 @@ server <- function(input, output, session) {
   # ---- Render the pending queue with per-item remove buttons ----
   output$fix_queue_box <- renderUI({
     q <- fix_queue()
-    if (length(q) == 0) return(tags$p(style = "color:#888; font-size:15px;", "No pending edits queued yet."))
+    if (length(q) == 0) return(tags$p(style = "color:#888; font-size:17px;", "No pending edits queued yet."))
     rows <- lapply(seq_along(q), function(i) {
       op <- q[[i]]
       label <- switch(op$type,
@@ -892,7 +1068,7 @@ server <- function(input, output, session) {
                       delete  = sprintf("🗑 Delete '%s' from %s", op$name, op$table)
       )
       fluidRow(
-        column(10, tags$p(style = "margin-bottom:4px; font-size:15px;", label)),
+        column(10, tags$p(style = "margin-bottom:4px; font-size:17px;", label)),
         column(2, actionButton(paste0("remove_queue_", i), "Remove", class = "btn-sm"))
       )
     })
@@ -1310,11 +1486,11 @@ server <- function(input, output, session) {
     if (pipeline_failed) {
       shinyjs::html(id = "pipeline_done_banner",
                     html = "❌ <strong>Run stopped due to an error.</strong> Check the log above, fix the issue, and click Run again.")
-      shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#fdecea; color:#c0392b; padding:14px 18px; border-radius:6px; font-size:16px; margin-top:4px;';")
+      shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:16px 20px; border-radius:12px; font-size:17.5px; margin-top:6px;';")
     } else {
       shinyjs::html(id = "pipeline_done_banner",
                     html = "✅ <strong>Run finished.</strong> You can close this window now.")
-      shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#eafaf1; color:#1e8449; padding:14px 18px; border-radius:6px; font-size:16px; margin-top:4px;';")
+      shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:16px 20px; border-radius:12px; font-size:17.5px; margin-top:6px;';")
     }
   })
   
