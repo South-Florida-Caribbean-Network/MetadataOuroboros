@@ -793,11 +793,20 @@ ui <- fluidPage(
                    ),
                    textInput("project", "project (DataStore Reference ID)", value = ""),
                    tags$hr(),
-                   checkboxInput("upload_data_package", 
-                                 tags$span(style = "font-weight:700;", "Also upload the data package to DataStore"), 
-                                 value = FALSE),
-                   helpText("Unchecked: the DOI/project are set, but nothing is uploaded. ",
-                            "Checked: the data package files are uploaded as well.")
+                   div(style = "background:#fdf6e3; border:2px solid #e8a33d; border-radius:8px; padding:14px 16px; margin: 6px 0 4px 0;",
+                       checkboxInput("upload_data_package", 
+                                     tags$span(style = "font-weight:800; font-size:17px; color:#5c4a2e;", 
+                                               "📦 Also upload the data package to DataStore"), 
+                                     value = FALSE),
+                       helpText(style = "margin-bottom:0;",
+                                "Unchecked: the DOI/project are set, but nothing is uploaded. ",
+                                "Checked: the data package files are uploaded as well."),
+                       tags$p(style = "color:#a15c00; font-size:14.5px; font-weight:600; margin: 10px 0 0 0;",
+                              "⚠️ Known DataStore API limitation: you can only upload files this way ",
+                              "ONCE per reference. If you need to replace or fix files after this, you ",
+                              "must do it manually through the DataStore web interface — re-running ",
+                              "Publish will not let you re-upload.")
+                   )
                  ),
                  conditionalPanel(
                    condition = "input.confirm_publish == false",
@@ -2111,9 +2120,26 @@ server <- function(input, output, session) {
       }
       
       if (isTRUE(c0$upload_data_package)) {
-        append_publish_log("⏳ Uploading data package to DataStore...")
-        EMLeditor::upload_data_package()
-        append_publish_log("✅ Data package uploaded.")
+        # upload_data_package() requires the *_metadata.xml file to live
+        # alongside the data CSVs in `directory` — copy it there first,
+        # the same way DPchecker's congruence checks need it temporarily.
+        xml_in_working <- file.path(working_folder, basename(xml_path))
+        file.copy(xml_path, xml_in_working, overwrite = TRUE)
+        
+        append_publish_log(paste("⏳ Uploading data package to DataStore from", working_folder, "..."))
+        upload_result <- tryCatch({
+          EMLeditor::upload_data_package(directory = working_folder, force = TRUE)
+          TRUE
+        }, error = function(e) {
+          append_publish_log(paste("❌ Error during upload:", conditionMessage(e)))
+          FALSE
+        }, finally = {
+          if (file.exists(xml_in_working)) file.remove(xml_in_working)
+        })
+        
+        if (isTRUE(upload_result)) {
+          append_publish_log("✅ Data package uploaded. Check DataStore's 'Files and Links' tab to confirm.")
+        }
       } else {
         append_publish_log("  (Upload not checked — DOI/project set, nothing uploaded.)")
       }
