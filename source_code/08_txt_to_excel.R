@@ -5,16 +5,17 @@ new_metadata_file <- file.path(dirname(working_folder), "blank_form", paste0(met
 success <- file.copy(metadata_template, new_metadata_file, overwrite = TRUE)
 if (!success) stop("Copy failed. Check path and permissions.")
 wb <- loadWorkbook(new_metadata_file)
-addStyle(wb, sheet = sheet_name, style = createStyle(locked = FALSE),
-         rows = 1:10000, cols = 1:50, gridExpand = TRUE, stack = TRUE)
 
 #-------------- Attributes txt to Excel ----------------------------------------
 
-# Grab attribute files from EML folder
-txt_files <- list.files(path = working_folder, pattern = "^attribute.*\\.txt$", full.names = TRUE)
-
 # Define the sheet name
 sheet_name <- "attributes"
+
+addStyle(wb, sheet = sheet_name, style = createStyle(locked = FALSE),
+         rows = 1:10000, cols = 1:50, gridExpand = TRUE, stack = TRUE)
+
+# Grab attribute files from EML folder
+txt_files <- list.files(path = working_folder, pattern = "^attribute.*\\.txt$", full.names = TRUE)
 
 # Starting row (saves space for title and explanations)
 start_row <- 3

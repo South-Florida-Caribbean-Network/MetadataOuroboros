@@ -443,8 +443,8 @@ ui <- fluidPage(
                div(id = "taxonomy_section_md",
                    wellPanel(
                      div(class = "section-title", "Taxonomy Info"),
-                     selectInput("data_taxa_tables", "data_taxa_tables (file)", choices = character(0)),
-                     selectInput("data_taxa_fields", "data_taxa_fields (column)", choices = character(0))
+                     selectInput("data_taxa_tables_md", "data_taxa_tables (file)", choices = character(0)),
+                     selectInput("data_taxa_fields_md", "data_taxa_fields (column)", choices = character(0))
                    )
                )
         ),
@@ -452,10 +452,10 @@ ui <- fluidPage(
                div(id = "geospatial_section_md",
                    wellPanel(
                      div(class = "section-title", "Geospatial Info"),
-                     selectInput("data_coordinates_table", "data_coordinates_table (file)", choices = character(0)),
-                     selectInput("data_latitude", "data_latitude (column)", choices = character(0)),
-                     selectInput("data_longitude", "data_longitude (column)", choices = character(0)),
-                     selectInput("data_sitename", "data_sitename (column)", choices = character(0))
+                     selectInput("data_coordinates_table_md", "data_coordinates_table (file)", choices = character(0)),
+                     selectInput("data_latitude_md", "data_latitude (column)", choices = character(0)),
+                     selectInput("data_longitude_md", "data_longitude (column)", choices = character(0)),
+                     selectInput("data_sitename_md", "data_sitename (column)", choices = character(0))
                    )
                )
         )
@@ -1020,10 +1020,14 @@ server <- function(input, output, session) {
   
   # ---- Scan working_folder for CSVs, populate the three file dropdowns ----
   do_scan <- function(preserve_selection = TRUE) {
+    message(">>> do_scan() CALLED at ", format(Sys.time(), "%H:%M:%S"), " | preserve_selection=", preserve_selection)
+    
     wf <- working_folder
     c0 <- isolate(cfg())
+    message(">>> do_scan(): working_folder = '", wf, "'")
     
     if (is.null(wf) || wf == "" || !dir.exists(wf)) {
+      message(">>> do_scan(): FOLDER NOT FOUND")
       scan_status(sprintf("⚠️ Folder not found: '%s'. Check the hardcoded working_folder path in app.R.", wf))
       updateSelectInput(session, "data_taxa_tables", choices = character(0))
       updateSelectInput(session, "data_coordinates_table", choices = character(0))
@@ -1032,7 +1036,10 @@ server <- function(input, output, session) {
     }
     
     files <- list.files(wf, pattern = "\\.csv$", full.names = FALSE)
+    message(">>> do_scan(): found ", length(files), " csv file(s): ", paste(files, collapse = ", "))
+    
     if (length(files) == 0) {
+      message(">>> do_scan(): ZERO FILES MATCHED")
       scan_status(sprintf("⚠️ No CSV files found in '%s'.", wf))
       updateSelectInput(session, "data_taxa_tables", choices = character(0))
       updateSelectInput(session, "data_coordinates_table", choices = character(0))
@@ -1048,16 +1055,22 @@ server <- function(input, output, session) {
       files[1]
     }
     
-    updateSelectInput(session, "data_taxa_tables", choices = files,
-                      selected = pick(c0$data_taxa_tables, isolate(input$data_taxa_tables)))
-    updateSelectInput(session, "data_coordinates_table", choices = files,
-                      selected = pick(c0$data_coordinates_table, isolate(input$data_coordinates_table)))
-    updateSelectInput(session, "data_dates_table", choices = files,
-                      selected = pick(c0$data_dates_table, isolate(input$data_dates_table)))
+    sel_taxa <- pick(c0$data_taxa_tables, isolate(input$data_taxa_tables))
+    sel_coord <- pick(c0$data_coordinates_table, isolate(input$data_coordinates_table))
+    sel_dates <- pick(c0$data_dates_table, isolate(input$data_dates_table))
+    message(">>> do_scan(): about to call updateSelectInput with selected = '", sel_taxa, "', '", sel_coord, "', '", sel_dates, "'")
+    
+    updateSelectInput(session, "data_taxa_tables", choices = files, selected = sel_taxa)
+    updateSelectInput(session, "data_taxa_tables_md", choices = files, selected = sel_taxa)
+    updateSelectInput(session, "data_coordinates_table", choices = files, selected = sel_coord)
+    updateSelectInput(session, "data_coordinates_table_md", choices = files, selected = sel_coord)
+    updateSelectInput(session, "data_dates_table", choices = files, selected = sel_dates)
+      
+    message(">>> do_scan(): updateSelectInput calls completed")
     
     scan_status(sprintf("✅ Found %d CSV file(s) in '%s'.", length(files), wf))
+    message(">>> do_scan(): scan_status set, function finished")
   }
-  
   get_csv_headers <- function(filename) {
     if (is.null(filename) || filename == "") return(character(0))
     f <- file.path(working_folder, filename)
@@ -1085,6 +1098,22 @@ server <- function(input, output, session) {
     updateSelectInput(session, "data_latitude", choices = cols, selected = pick(c0$data_latitude))
     updateSelectInput(session, "data_longitude", choices = cols, selected = pick(c0$data_longitude))
     updateSelectInput(session, "data_sitename", choices = cols, selected = pick(c0$data_sitename))
+  }, ignoreInit = FALSE)
+  
+  observeEvent(input$data_taxa_tables_md, {
+    c0 <- isolate(cfg())
+    cols <- get_csv_headers(input$data_taxa_tables_md)
+    sel <- if (!is.null(c0$data_taxa_fields) && c0$data_taxa_fields %in% cols) c0$data_taxa_fields else character(0)
+    updateSelectInput(session, "data_taxa_fields_md", choices = cols, selected = sel)
+  }, ignoreInit = FALSE)
+  
+  observeEvent(input$data_coordinates_table_md, {
+    c0 <- isolate(cfg())
+    cols <- get_csv_headers(input$data_coordinates_table_md)
+    pick <- function(saved) if (!is.null(saved) && saved %in% cols) saved else character(0)
+    updateSelectInput(session, "data_latitude_md", choices = cols, selected = pick(c0$data_latitude))
+    updateSelectInput(session, "data_longitude_md", choices = cols, selected = pick(c0$data_longitude))
+    updateSelectInput(session, "data_sitename_md", choices = cols, selected = pick(c0$data_sitename))
   }, ignoreInit = FALSE)
   
   observeEvent(input$data_dates_table, {
@@ -1685,12 +1714,12 @@ server <- function(input, output, session) {
       ds_ref_code            = input$ds_ref_code,
       doi                    = isolate(cfg())$doi,  # populated after publish; not a direct input
       project                = input$project,
-      data_taxa_tables       = input$data_taxa_tables,
-      data_taxa_fields       = input$data_taxa_fields,
-      data_coordinates_table = input$data_coordinates_table,
-      data_latitude          = input$data_latitude,
-      data_longitude         = input$data_longitude,
-      data_sitename          = input$data_sitename,
+      data_taxa_tables       = if (input$task == "metadata") input$data_taxa_tables_md else input$data_taxa_tables,
+      data_taxa_fields       = if (input$task == "metadata") input$data_taxa_fields_md else input$data_taxa_fields,
+      data_coordinates_table = if (input$task == "metadata") input$data_coordinates_table_md else input$data_coordinates_table,
+      data_latitude          = if (input$task == "metadata") input$data_latitude_md else input$data_latitude,
+      data_longitude         = if (input$task == "metadata") input$data_longitude_md else input$data_longitude,
+      data_sitename          = if (input$task == "metadata") input$data_sitename_md else input$data_sitename,
       data_dates_table       = input$data_dates_table,
       data_startdate_field   = input$data_startdate_field,
       data_enddate_field     = input$data_enddate_field
@@ -1930,8 +1959,13 @@ server <- function(input, output, session) {
                     html = "❌ <strong>Run stopped due to an error.</strong> Check the log above, fix the issue, and click Run again.")
       shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:16px 20px; border-radius:12px; font-size:17.5px; margin-top:6px;';")
     } else {
-      shinyjs::html(id = "pipeline_done_banner",
-                    html = "✅ <strong>Run finished.</strong> Continue to the next step below.")
+      success_msg <- switch(c0$task,
+                            metadata = "✅ <strong>Run finished.</strong> Continue to the next step below.",
+                            workbook = "✅ <strong>Run finished.</strong> Your Excel workbook has been built.",
+                            reboot   = "✅ <strong>Run finished.</strong> Your Excel workbook has been rebuilt.",
+                            "✅ <strong>Run finished.</strong>"
+      )
+      shinyjs::html(id = "pipeline_done_banner", html = success_msg)
       shinyjs::runjs("document.getElementById('pipeline_done_banner').style.cssText = 'display:block; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:16px 20px; border-radius:12px; font-size:17.5px; margin-top:6px;';")
     }
   })
@@ -2024,19 +2058,16 @@ server <- function(input, output, session) {
   # ---- Check both the on-disk XML and the saved JSON config for an existing
   # DOI, since the two can drift out of sync (hand-edited XML, stale JSON from
   # an earlier run, etc). Returns the existing DOI string if found in either
-  # place, or NULL if neither has one. ----
+  # place, or NULL if neither has one. Uses EMLeditor::get_doi() rather than
+  # manually parsing the EML object, since that's the documented/supported way
+  # to read it and is robust to internal EML structure changes. ----
   find_existing_doi <- function(xml_path) {
     doi_from_xml <- NULL
     if (file.exists(xml_path)) {
       doi_from_xml <- tryCatch({
         my_metadata <- EML::read_eml(xml_path, from = "xml")
-        alt_id <- my_metadata$dataset$alternateIdentifier
-        if (!is.null(alt_id) && length(alt_id) > 0) {
-          val <- if (is.list(alt_id)) alt_id[[1]] else alt_id[1]
-          if (!is.null(val) && nzchar(val)) val else NULL
-        } else {
-          NULL
-        }
+        val <- EMLeditor::get_doi(my_metadata)
+        if (!is.null(val) && length(val) > 0 && nzchar(val[1])) val[1] else NULL
       }, error = function(e) NULL)
     }
     
@@ -2102,13 +2133,8 @@ server <- function(input, output, session) {
       # alone isn't checked (e.g. before Create Metadata is re-run).
       new_alt_id <- tryCatch({
         reread <- EML::read_eml(xml_path, from = "xml")
-        alt_id <- reread$dataset$alternateIdentifier
-        if (!is.null(alt_id) && length(alt_id) > 0) {
-          val <- if (is.list(alt_id)) alt_id[[1]] else alt_id[1]
-          if (!is.null(val) && nzchar(val)) val else NULL
-        } else {
-          NULL
-        }
+        val <- EMLeditor::get_doi(reread)
+        if (!is.null(val) && length(val) > 0 && nzchar(val[1])) val[1] else NULL
       }, error = function(e) NULL)
       
       if (!is.null(new_alt_id)) {
