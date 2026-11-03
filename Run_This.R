@@ -3,31 +3,71 @@
 # Shiny GUI for configuring the EMLassemblyline/EMLeditor/NPSdataverse workflow
 #
 # Save this as app.R and run with: shiny::runApp()
-# Requires: shiny, jsonlite, lubridate, readr
-# ============================================================================
-
-# ---- Auto-install any missing required packages before loading them -------
+# ---- 1. CRAN packages ------------------------------------------------------
+# NOTE: EMLassemblyline is NOT on CRAN, so it is installed from GitHub below.
 required_cran_packages <- c(
   "shiny", "jsonlite", "lubridate", "readr", "shinyjs", "htmltools", "cli",
-  "svDialogs", "readxl", "dplyr", "tidyr", "openxlsx", "EMLassemblyline"
+  "svDialogs", "readxl", "dplyr", "tidyr", "openxlsx", "EML", "remotes"
 )
-missing_cran <- required_cran_packages[!sapply(required_cran_packages, requireNamespace, quietly = TRUE)]
+
+missing_cran <- required_cran_packages[
+  !sapply(required_cran_packages, requireNamespace, quietly = TRUE)
+]
 if (length(missing_cran) > 0) {
   message("Installing missing CRAN packages: ", paste(missing_cran, collapse = ", "))
   install.packages(missing_cran)
 }
 
-if (!requireNamespace("pak", quietly = TRUE)) {
-  install.packages("pak")
+# ---- 2. GitHub packages (installed ONE AT A TIME, dependencies first) -------
+# Names = package name, values = GitHub repo.
+# Order matters: each package only depends on ones listed above it.
+github_packages <- c(
+  QCkit           = "doi-nps/QCkit",
+  NPSdatastore    = "doi-nps/NPSdatastore",
+  taxonomyCleanr  = "EDIorg/taxonomyCleanr",
+  EMLeditor       = "doi-nps/EMLeditor",
+  EMLassemblyline = "EDIorg/EMLassemblyline",
+  DPchecker       = "doi-nps/DPchecker",
+  NPSutils        = "doi-nps/NPSutils",
+  NPSdataverse    = "nationalparkservice/NPSdataverse"
+)
+
+missing_gh <- names(github_packages)[
+  !sapply(names(github_packages), requireNamespace, quietly = TRUE)
+]
+
+if (length(missing_gh) > 0) {
+  message("Installing missing GitHub packages: ", paste(missing_gh, collapse = ", "))
+  
+  failed <- character(0)
+  for (pkg in missing_gh) {
+    message("---- Installing ", pkg, " from ", github_packages[[pkg]], " ----")
+    ok <- tryCatch({
+      remotes::install_github(github_packages[[pkg]],
+                              dependencies = TRUE,
+                              upgrade = "never",
+                              quiet = FALSE)
+      TRUE
+    }, error = function(e) {
+      message("FAILED: ", pkg, "\n  ", conditionMessage(e))
+      FALSE
+    })
+    if (!ok || !requireNamespace(pkg, quietly = TRUE)) {
+      failed <- c(failed, pkg)
+    }
+  }
+  
+  if (length(failed) > 0) {
+    stop(
+      "These packages did not install: ", paste(failed, collapse = ", "),
+      "\nRe-run the script (it only retries the missing ones), or check that ",
+      "the repo names above are correct and that api.github.com is reachable.",
+      call. = FALSE
+    )
+  }
 }
 
-if (!requireNamespace("EMLeditor", quietly = TRUE) ||
-    !requireNamespace("EML", quietly = TRUE) ||
-    !requireNamespace("DPchecker", quietly = TRUE)) {
-  message("Installing NPSdataverse (includes EMLeditor, EML, DPchecker) from GitHub...")
-  pak::pkg_install("nationalparkservice/NPSdataverse")
-}
-
+# ---- 3. Load libraries -----------------------------------------------------
 library(shiny)
 library(jsonlite)
 library(lubridate)
@@ -2231,4 +2271,4 @@ server <- function(input, output, session) {
   })
 }
 
-shinyApp(ui, server)
+shiny::runApp(shinyApp(ui, server))
